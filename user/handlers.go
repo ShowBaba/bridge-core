@@ -2,13 +2,16 @@ package user
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/go-playground/validator"
-	// "github.com/showbaba/query-bridge/bridge/data"
 	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/shared"
+	"github.com/showbaba/query-bridge/bridge/utils"
+
+	"gorm.io/gorm"
 )
 
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
@@ -16,58 +19,58 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var input RegisterPayload
 	if body, err := io.ReadAll(r.Body); err != nil {
-		shared.Dispatch400Error(w, "invalid body: %s", err)
+		utils.Dispatch400Error(w, fmt.Sprintf("invalid body: %s", err.Error()))
 		return
 	} else if err := json.Unmarshal(body, &input); err != nil {
-		shared.Dispatch400Error(w, "invalid body: %s", err)
+		utils.Dispatch400Error(w, fmt.Sprintf("invalid body: %s", err.Error()))
 		return
 	}
 	validate := validator.New()
 	err := validate.Struct(input)
 	if err != nil {
 		validationErrors := err.(validator.ValidationErrors)
-		shared.Dispatch400Error(w, "validation error", validationErrors.Error())
+		utils.Dispatch400Error(w, validationErrors.Error())
 		return
 	}
-	var user models.User
-	userData, err := user.GetByEmail(db, input.Email)
+	var user *models.User
+	user, err = user.GetUser(db, models.User{Email: input.Email})
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	if user != nil {
+		utils.Dispatch400Error(w, "email already used")
+		return
+	}
+	hash, err := utils.HashPassword(input.Password)
 	if err != nil {
-		shared.Dispatch500Error(w, err)
+		utils.Dispatch500Error(w, err.Error())
 		return
 	}
-	if userData != nil {
-		shared.Dispatch400Error(w, "email already used", nil)
-		return
-	}
-	hash, err := HashPassword(input.Password)
-	if err != nil {
-		shared.Dispatch500Error(w, err)
-		return
-	}
-	user = models.User{
+	user = &models.User{
 		Email:     input.Email,
-		Firstname: input.Firstname,
-		Lastname:  input.Lastname,
+		FirstName: input.Firstname,
+		LastName:  input.Lastname,
 		Password:  hash,
 	}
 	_, err = user.Insert(db)
 	if err != nil {
-		shared.Dispatch500Error(w, err)
+		utils.Dispatch500Error(w, err.Error())
 		return
 	}
-	mail := shared.Mail{
-		Sender:  shared.MAIL_USERNAME,
-		Subject: "Welcome to our blog!",
+	mail := utils.Mail{
+		Sender:  utils.MAIL_USERNAME,
+		Subject: "Welcome QueryBridge!",
 		To:      []string{input.Email},
 		Body: `<div style="font-family: Helvetica, Arial, sans-serif; min-width: 1000px; overflow: auto; line-height: 2;">
             <div style="margin: 50px auto; width: 70%; padding: 20px 0;">
-                <div style="border-bottom: 1px solid #eee;"><a href="blog.com" style="font-size: 1.4em; color: #00466a; text-decoration: none; font-weight: 600;">SAM's BLOG</a></div>
+                <div style="border-bottom: 1px solid #eee;"><a href="google.com" style="font-size: 1.4em; color: #00466a; text-decoration: none; font-weight: 600;">QueryBridge</a></div>
                 <p style="font-size: 1.1em;">Hi,</p>
                 <p>Hi ` + input.Firstname + `</p>
-                <p>Welcome to Sam's BLOG</p>
+                <p>Welcome to QueryBridge</p>
                 <p style="font-size: 0.9em;">
                     Regards,<br />
-                    SAM's BLOG
+                    QueryBridge
                 </p>
                 <hr style="border: none; border-top: 1px solid #eee;" />
             </div>
@@ -75,23 +78,23 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	payload, err := json.Marshal(mail)
 	if err != nil {
-		shared.Dispatch500Error(w, err)
+		utils.Dispatch500Error(w, err.Error())
 		return
 	}
-	if err := shared.SendNotification(messageChan, payload); err != nil {
+	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.NOTIFICATION_QUEUE); err != nil {
 		if err != nil {
-			shared.Dispatch500Error(w, err)
+			utils.Dispatch500Error(w,  err.Error())
 			return
 		}
 	}
-	response := shared.APIResponse{
+	response := utils.APIResponse{
 		Status:  http.StatusOK,
 		Message: "user registered successfully",
 		Data:    nil,
 	}
 	responseJSON, err := json.Marshal(response)
 	if err != nil {
-		shared.Dispatch500Error(w, err)
+		utils.Dispatch500Error(w, err.Error())
 		return
 	}
 	w.Write(responseJSON)

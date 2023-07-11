@@ -4,13 +4,12 @@ import (
 	"context"
 	"log"
 
-	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/showbaba/query-bridge/shared"
+	"github.com/showbaba/query-bridge/bridge/utils"
 )
 
-func HandleEmailMsg(ctx context.Context, channel *amqp.Channel, payload EmailMsgPayload) error {
-	mail := shared.Mail{
-		Sender:  shared.MAIL_USERNAME,
+func HandleEmailMsg(ctx context.Context, payload EmailMsgPayload) error {
+	mail := utils.Mail{
+		Sender:  utils.MAIL_USERNAME,
 		Subject: payload.Subject,
 		To:      payload.To,
 		Body:    payload.Body,

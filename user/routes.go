@@ -1,19 +1,21 @@
 package user
 
 import (
-	"database/sql"
+	"context"
 
 	"github.com/gorilla/mux"
-	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/rabbitmq/amqp091-go"
+	"gorm.io/gorm"
 )
 
 var (
-	db          *sql.DB
-	messageChan *amqp.Channel
+	db      *gorm.DB
+	queueConnection *amqp091.Connection
+	ctx     = context.Background()
 )
 
-func InitializeUserRoutes(router *mux.Router, dbClient *sql.DB, channel *amqp.Channel) {
-	messageChan = channel
+func InitializeUserRoutes(router *mux.Router, dbClient *gorm.DB, qC *amqp091.Connection) {
+	queueConnection = qC
 	db = dbClient
 	router.HandleFunc("/register", RegisterHandler).Methods("POST")
 }

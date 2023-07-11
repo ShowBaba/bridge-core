@@ -1,69 +1,57 @@
 package models
 
 import (
-	"context"
-	"database/sql"
+	"errors"
 	"time"
 
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"gorm.io/gorm"
 )
 
 type User struct {
-	ID        int       `json:"id"`
-	Email     string    `json:"email"`
-	Firstname string    `json:"firstname,omitempty"`
-	Lastname  string    `json:"lastname,omitempty"`
-	Password  string    `json:"-"`
+	ID        uint `gorm:"primaryKey"`
+	Email     string
+	FirstName string
+	LastName  string
+	Password  string
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (u *User) Insert(db *sql.DB) (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DbTimeout)
-	defer cancel()
-	var id int
-	query := `INSERT INTO Users (email, firstname, lastname, password, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`
-	if err := db.QueryRowContext(ctx, query,
-		&u.Email, &u.Firstname,
-		&u.Lastname, &u.Password,
-		time.Now(), time.Now()).Scan(&id); err != nil {
+func (u *User) Insert(db *gorm.DB) (uint, error) {
+	if err := db.Create(u).Error; err != nil {
 		return 0, err
 	}
-	return id, nil
+	return u.ID, nil
 }
 
-func (u *User) Update(db *sql.DB) (*User, error) {
+func (u *User) Update(db *gorm.DB) (*User, error) {
 	return nil, nil
 }
 
-func (u *User) Delete(db *sql.DB) error {
+func (u *User) Delete(db *gorm.DB) error {
 	return nil
 }
 
-func (u *User) DeleteByID(db *sql.DB, id int) error {
+func (u *User) DeleteByID(db *gorm.DB, id int) error {
 	return nil
 }
 
-func (u *User) GetAll(db *sql.DB) ([]*User, error) {
+func (u *User) GetAll(db *gorm.DB) ([]*User, error) {
 	return nil, nil
 }
 
-func (u *User) GetByEmail(db *sql.DB, email string) (*User, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), utils.DbTimeout)
-	defer cancel()
-	query := `SELECT id, email, firstname, lastname, password, created_at, updated_at FROM Users WHERE email = $1`
+func (u *User) GetUser(db *gorm.DB, q User) (*User, error) {
 	var user User
-	row := db.QueryRowContext(ctx, query, email)
-	if err := row.Scan(&user.ID, &user.Email, &user.Firstname, &user.Lastname, &user.Password, &user.CreatedAt, &user.UpdatedAt); err != nil {
-		if err != sql.ErrNoRows {
-			return nil, err
+	err := db.Where(q).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, gorm.ErrRecordNotFound
 		}
-		return nil, nil
+		return nil, err
 	}
 	return &user, nil
 }
 
-func (u *User) GetByID(idb *sql.DB, d int) (*User, error) {
+func (u *User) GetByID(idb *gorm.DB, d int) (*User, error) {
 	return nil, nil
 }
