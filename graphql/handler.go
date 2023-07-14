@@ -1,8 +1,11 @@
-package gql
+package graphql
 
 import (
+	"log"
+
 	"github.com/graphql-go/graphql"
 	"github.com/showbaba/query-bridge/bridge/models"
+	"github.com/showbaba/query-bridge/bridge/utils"
 	"gorm.io/gorm"
 )
 
@@ -44,6 +47,14 @@ func Init(db *gorm.DB) *graphql.Object {
 					if res.RowsAffected > 0 {
 						list.Nodes = []interface{}{}
 						for _, u := range applications {
+							if u.ApiKey != "" {
+								// decrypt
+								rawApiKey, err := utils.Decrypt(u.ApiKey, []byte(utils.GetConfig().EncryptionKey))
+								if err != nil {
+									log.Fatal(err)
+								}
+								u.ApiKey = string(rawApiKey)
+							}
 							list.Nodes = append(list.Nodes, interface{}(u))
 						}
 						list.TotalCount = len(list.Nodes)
@@ -102,7 +113,7 @@ func Init(db *gorm.DB) *graphql.Object {
 						endpoints []models.Endpoint
 					)
 					tx = db.Model(&models.Endpoint{}).Joins("JOIN tables ON endpoints.table_id = tables.id").
-						Joins("JOIN applications ON endpoints.table_id = applications.id")
+						Joins("JOIN applications ON endpoints.application_id = applications.id")
 					tx = parseDbClause(params, tx, EndpointType)
 					res := tx.Debug().Scan(&endpoints)
 					if res.RowsAffected > 0 {
@@ -158,26 +169,26 @@ func Init(db *gorm.DB) *graphql.Object {
 				},
 			),
 			// "stream_logs": makeListField(
-				// TODO: implement fetch from mongodb
-				// makeNodeListType("StreamLogList", StreamLogType),
-				// func(params graphql.ResolveParams) (interface{}, error) {
-				// 	var (
-				// 		list       ListResult
-				// 		tx         *gorm.DB
-				// 		streamLogs []models.StreamLog
-				// 	)
-				// 	tx = db.Model(&models.StreamLog{})
-				// 	tx = parseDbClause(params, tx, StreamLogType)
-				// 	res := tx.Debug().Scan(&streamLogs)
-				// 	if res.RowsAffected > 0 {
-				// 		list.Nodes = []interface{}{}
-				// 		for _, u := range streamLogs {
-				// 			list.Nodes = append(list.Nodes, interface{}(u))
-				// 		}
-				// 		list.TotalCount = len(list.Nodes)
-				// 	}
-				// 	return list, nil
-				// },
+			// TODO: implement fetch from mongodb
+			// makeNodeListType("StreamLogList", StreamLogType),
+			// func(params graphql.ResolveParams) (interface{}, error) {
+			// 	var (
+			// 		list       ListResult
+			// 		tx         *gorm.DB
+			// 		streamLogs []models.StreamLog
+			// 	)
+			// 	tx = db.Model(&models.StreamLog{})
+			// 	tx = parseDbClause(params, tx, StreamLogType)
+			// 	res := tx.Debug().Scan(&streamLogs)
+			// 	if res.RowsAffected > 0 {
+			// 		list.Nodes = []interface{}{}
+			// 		for _, u := range streamLogs {
+			// 			list.Nodes = append(list.Nodes, interface{}(u))
+			// 		}
+			// 		list.TotalCount = len(list.Nodes)
+			// 	}
+			// 	return list, nil
+			// },
 			// ),
 		}})
 }

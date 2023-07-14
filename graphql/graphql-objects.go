@@ -1,8 +1,7 @@
-package gql
+package graphql
 
 import (
 	"github.com/graphql-go/graphql"
-	"github.com/showbaba/query-bridge/bridge/models"
 )
 
 var UserType = graphql.NewObject(
@@ -23,9 +22,10 @@ var ApplicationType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Application",
 		Fields: graphql.Fields{
-			"ID":      &graphql.Field{Type: graphql.Int},
-			"name":    &graphql.Field{Type: graphql.String},
-			"user_id": &graphql.Field{Type: graphql.Int},
+			"ID":         &graphql.Field{Type: graphql.Int},
+			"name":       &graphql.Field{Type: graphql.String},
+			"api_key":    &graphql.Field{Type: graphql.String},
+			"user_id":    &graphql.Field{Type: graphql.Int},
 			"created_at": &graphql.Field{Type: graphql.DateTime},
 			"updated_at": &graphql.Field{Type: graphql.DateTime},
 		},
@@ -36,22 +36,17 @@ var DatabaseType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Database",
 		Fields: graphql.Fields{
-			"ID":          &graphql.Field{Type: graphql.Int},
-			"Name":        &graphql.Field{Type: graphql.String},
-			"Host":        &graphql.Field{Type: graphql.String},
-			"Port":        &graphql.Field{Type: graphql.Int},
-			"Database":    &graphql.Field{Type: graphql.String},
-			"Username":    &graphql.Field{Type: graphql.String},
-			"Password":    &graphql.Field{Type: graphql.String},
-			"DbEngine":    &graphql.Field{Type: graphql.String},
-			"ApplicationID": &graphql.Field{Type: graphql.Int, Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-				if database, ok := p.Source.(*models.Database); ok {
-					return database.ApplicationID, nil
-				}
-				return nil, nil
-			}},
-			"CreatedAt": &graphql.Field{Type: graphql.DateTime},
-			"UpdatedAt": &graphql.Field{Type: graphql.DateTime},
+			"ID":            &graphql.Field{Type: graphql.Int},
+			"Name":          &graphql.Field{Type: graphql.String},
+			"Host":          &graphql.Field{Type: graphql.String},
+			"Port":          &graphql.Field{Type: graphql.Int},
+			"Database":      &graphql.Field{Type: graphql.String},
+			"Username":      &graphql.Field{Type: graphql.String},
+			"Password":      &graphql.Field{Type: graphql.String},
+			"DbEngine":      &graphql.Field{Type: graphql.String},
+			"ApplicationID": &graphql.Field{Type: graphql.Int},
+			"CreatedAt":     &graphql.Field{Type: graphql.DateTime},
+			"UpdatedAt":     &graphql.Field{Type: graphql.DateTime},
 		},
 	},
 )
@@ -69,17 +64,21 @@ var ColumnType = graphql.NewObject(
 	},
 )
 
-
 var EndpointType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Endpoint",
 		Fields: graphql.Fields{
-			"ID":            &graphql.Field{Type: graphql.Int},
-			"ApplicationID": &graphql.Field{Type: graphql.Int},
-			"TableID":       &graphql.Field{Type: graphql.Int},
-			"Query":         &graphql.Field{Type: graphql.String},
-			"CreatedAt":     &graphql.Field{Type: graphql.DateTime},
-			"UpdatedAt":     &graphql.Field{Type: graphql.DateTime},
+			"ID":             &graphql.Field{Type: graphql.Int},
+			"Name":           &graphql.Field{Type: graphql.String},
+			"ApplicationID":  &graphql.Field{Type: graphql.Int},
+			"TableID":        &graphql.Field{Type: graphql.Int},
+			"Limit":          &graphql.Field{Type: graphql.Int},
+			"OrderBy":        &graphql.Field{Type: graphql.String},
+			"OrderDirection": &graphql.Field{Type: graphql.String},
+			"Query":          &graphql.Field{Type: graphql.String},
+			"IsPublic":       &graphql.Field{Type: graphql.Boolean},
+			"CreatedAt":      &graphql.Field{Type: graphql.DateTime},
+			"UpdatedAt":      &graphql.Field{Type: graphql.DateTime},
 		},
 	},
 )

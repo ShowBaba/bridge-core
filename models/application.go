@@ -10,7 +10,8 @@ import (
 type Application struct {
 	ID        uint `gorm:"primaryKey"`
 	Name      string
-	UserID    uint `json:"user_id"`
+	UserID    uint      `json:"user_id"`
+	ApiKey    string    `json:"api_key"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -22,13 +23,20 @@ func (a *Application) Insert(db *gorm.DB) error {
 	return nil
 }
 
-func (a *Application) FetchApplication(db *gorm.DB, q Application) (*Application, error) {
+func (a *Application) FetchApplication(db *gorm.DB, q Application) (*Application, bool, error) {
 	var application Application
 	if err := db.Where(q).First(&application).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, false, nil
 		}
-		return nil, err
+		return nil, false, err
 	}
-	return &application, nil
+	return &application, true, nil
+}
+
+func (a *Application) Update(db *gorm.DB, updates Application) error {
+	if err := db.Model(a).Where("id = ?", a.ID).Updates(updates).Error; err != nil {
+		return err
+	}
+	return nil
 }

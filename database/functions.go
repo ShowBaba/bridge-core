@@ -3,7 +3,6 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/showbaba/query-bridge/bridge/models"
 	"github.com/showbaba/query-bridge/bridge/utils"
@@ -89,11 +88,7 @@ func FetchTables(db *sql.DB, schema string, sqlLogCh chan<- string) ([]string, e
 func FetchColumns(db *sql.DB, schema, tableName string, sqlLogCh chan<- string) ([]string, error) {
 	var columns []string
 
-	query := fmt.Sprintf(`
-		SELECT column_name
-		FROM information_schema.columns
-		WHERE table_schema = '%s' AND table_name = '%s'
-	`, schema, tableName)
+	query := fmt.Sprintf(`SELECT column_name FROM information_schema.columns WHERE table_schema = '%s' AND table_name = '%s'`, schema, tableName)
 	sqlLogCh <- query
 
 	rows, err := db.Query(query)
@@ -114,22 +109,13 @@ func FetchColumns(db *sql.DB, schema, tableName string, sqlLogCh chan<- string) 
 	return columns, nil
 }
 
-func LogSqlQuery(mongoClient *mongo.Client, ch <-chan string, errCh chan<- error) {
+func LogSqlQuery(mongoClient *mongo.Client, applicationID uint, userID uint, ch <-chan string, errCh chan<- error) {
 	for logData := range ch {
-		collection := mongoClient.Database(utils.QUERY_BRIDGE_MONGO_DB_NAME).Collection("logs")
-		currentTime := time.Now()
-		_, err := collection.InsertOne(ctx, models.StreamLog{
-			Message:   logData,
-			Source:    "DATABASE",
-			Level:     "INFO",
-			Timestamp: currentTime.Format("2006-01-02 15:04:05"),
-			CreatedAt: currentTime,
-			UpdatedAt: currentTime,
-		})
+		var stream *models.StreamLog
+		err := stream.Insert(ctx, mongoClient, logData, applicationID, userID)
 		if err != nil {
 			errCh <- err
 		}
-		// TODO: send log to websocket
 	}
 }
 

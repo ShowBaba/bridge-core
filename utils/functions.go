@@ -26,7 +26,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func ValidateAuthToken(next http.HandlerFunc) http.HandlerFunc {
+func ValidateAuthHeaderToken(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		authHeader := r.Header.Get("Authorization")
@@ -39,7 +39,7 @@ func ValidateAuthToken(next http.HandlerFunc) http.HandlerFunc {
 			Dispatch400Error(w, "bearer token not in header")
 			return
 		}
-		claim, err := validateAuthToken(parts[1], GetConfig().JWTSecretKey)
+		claim, err := ValidateAuthToken(parts[1], GetConfig().JWTSecretKey)
 		if err != nil {
 			Dispatch400Error(w, fmt.Sprintf("error validating auth token token: %v", err))
 			return
@@ -53,7 +53,7 @@ func ValidateAuthToken(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // validate auth token in header
-func validateAuthToken(signedToken, SECRET_KEY string) (*AuthTokenJwtClaim, error) {
+func ValidateAuthToken(signedToken, SECRET_KEY string) (*AuthTokenJwtClaim, error) {
 	token, err := jwt.ParseWithClaims(
 		signedToken,
 		&AuthTokenJwtClaim{},
@@ -254,4 +254,8 @@ func unpadPlaintext(paddedPlaintext []byte) ([]byte, error) {
 	}
 
 	return paddedPlaintext[:length-padding], nil
+}
+
+func BoolPointer(b bool) *bool {
+	return &b
 }

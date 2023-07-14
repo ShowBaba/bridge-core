@@ -29,6 +29,7 @@ type Config struct {
 	LogStreamKafkaBrokerUrl string
 	EncryptionKey           string
 	MongoURI                string
+	ServerBaseURL           string
 }
 
 func GetConfig() Config {
@@ -56,6 +57,7 @@ func defaultConfig() *Config {
 		LogStreamKafkaBrokerUrl: os.Getenv("LOG_STREAM_KAFKA_BROKER_URL"),
 		EncryptionKey:           os.Getenv("ENCRYPTION_KEY"),
 		MongoURI:                os.Getenv("MONGO_URI"),
+		ServerBaseURL:           os.Getenv("SERVER_BASE_URL"),
 	}
 }
 

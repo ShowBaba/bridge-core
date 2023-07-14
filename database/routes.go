@@ -17,5 +17,5 @@ var (
 func InitializeApplicationRoutes(router *mux.Router, dbClient *gorm.DB, qC *amqp091.Connection) {
 	db = dbClient
 	queueConnection = qC
-	router.HandleFunc("/{database_id}", utils.ValidateAuthToken(http.HandlerFunc(UpdateDatabase))).Methods("PATCH")
+	router.HandleFunc("/{database_id}", utils.ValidateAuthHeaderToken(http.HandlerFunc(UpdateDatabase))).Methods("PATCH")
 }

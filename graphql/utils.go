@@ -1,4 +1,4 @@
-package gql
+package graphql
 
 import (
 	"fmt"
@@ -122,6 +122,7 @@ func parseDbClause(params graphql.ResolveParams, tx *gorm.DB, nodeType *graphql.
 			tx = tx.Where("tables.id = ?", val.(int))
 			continue
 		}
+		
 		key = underscore(key)
 		switch field.Type {
 		case graphql.String:

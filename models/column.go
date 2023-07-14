@@ -39,3 +39,11 @@ func (c *Column) Update(db *gorm.DB, updates Column) error {
 	}
 	return nil
 }
+
+func (c *Column) FetchColumns(db *gorm.DB, q Column) ([]Column, error) {
+	var columns []Column
+	if err := db.Where(q).Find(&columns).Error; err != nil {
+		return nil, err
+	}
+	return columns, nil
+}

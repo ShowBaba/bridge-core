@@ -37,6 +37,7 @@ func (mail *Mail) BuildMessage() string {
 
 type DatabaseTask struct {
 	DatabaseID uint
+	UserID uint
 }
 
 type DatabaseConnectionPayload struct {

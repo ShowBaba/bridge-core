@@ -58,7 +58,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	token := Token{Token: jwtToken}
 	response := utils.APIResponse{
 		Status:  http.StatusOK,
-		Message: "login",
+		Message: "login successfully",
 		Data:    token,
 	}
 	responseJSON, err := json.Marshal(response)

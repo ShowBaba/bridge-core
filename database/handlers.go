@@ -17,6 +17,7 @@ import (
 func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
+	userId := r.Context().Value("id").(uint)
 	var input UpdateDatabasePayload
 	if body, err := io.ReadAll(r.Body); err != nil {
 		utils.Dispatch400Error(w, "invalid body: %s")
@@ -57,6 +58,21 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		utils.Dispatch404Error(w, "database with id not found")
 		return
 	}
+	var application *models.Application
+	_, exist, err = application.FetchApplication(db, models.Application{ID: database.ApplicationID})
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	if !exist {
+		utils.Dispatch404Error(w, "cannot find application")
+		return
+	}
+	if application.UserID != userId {
+		utils.Dispatch401Error(w, "unauthorized")
+		return
+	}
+
 	if input.Name != "" {
 		_, exist, err := database.FetchDatabase(db, models.Database{Name: input.Name, ApplicationID: database.ApplicationID})
 		if err != nil {
@@ -85,7 +101,6 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		rawPassword, err := utils.Decrypt(database.Password, []byte(utils.GetConfig().EncryptionKey))
 		if err != nil {
 			utils.Dispatch500Error(w, err.Error())
-
 			return
 		}
 		input.Password = string(rawPassword)
@@ -130,9 +145,10 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//TODO: re-fetch database data if only credentials changed
+	//TODO: only need to re-fetch database data if only credentials changed
 	databaseTask := utils.DatabaseTask{
 		DatabaseID: uint(databaseID),
+		UserID: userId,
 	}
 	payload, err := json.Marshal(databaseTask)
 	if err != nil {
@@ -146,7 +162,7 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	response := utils.APIResponse{
-		Status:  http.StatusCreated,
+		Status:  http.StatusOK,
 		Message: "database updated successfully",
 	}
 	responseJSON, err := json.Marshal(response)

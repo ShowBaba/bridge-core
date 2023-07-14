@@ -28,6 +28,12 @@ func Dispatch400Error(w http.ResponseWriter, msg string) {
 	w.Write(WriteError(http.StatusBadRequest, msg))
 }
 
+// 401 - unauthorized
+func Dispatch401Error(w http.ResponseWriter, msg string) {
+	w.WriteHeader(http.StatusUnauthorized)
+	w.Write(WriteError(http.StatusUnauthorized, msg))
+}
+
 // 404 - not found
 func Dispatch404Error(w http.ResponseWriter, msg string) {
 	w.WriteHeader(http.StatusNotFound)

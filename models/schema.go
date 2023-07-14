@@ -40,3 +40,13 @@ func (s *Schema) Update(db *gorm.DB, updates Schema) error {
 	return nil
 }
 
+func (s *Schema) FetchSchema(db *gorm.DB, q Schema) (*Schema, bool, error) {
+	var schema Schema
+	if err := db.Where(q).First(&schema).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return &schema, true, nil
+}

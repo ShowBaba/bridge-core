@@ -1,4 +1,4 @@
-package gql
+package graphql
 
 type ListResult struct {
 	Nodes      []interface{} `json:"nodes"`

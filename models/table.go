@@ -39,3 +39,14 @@ func (t *Table) Update(db *gorm.DB, updates Table) error {
 	}
 	return nil
 }
+
+func (a *Table) FetchTable(db *gorm.DB, q Table) (*Table, bool, error) {
+	var table Table
+	if err := db.Where(q).First(&table).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	return &table, true, nil
+}
