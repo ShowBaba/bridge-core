@@ -10,7 +10,7 @@ import (
 	"github.com/showbaba/query-bridge/bridge/utils"
 )
 
-	var ctx = context.Background()
+var ctx = context.Background()
 
 func InitNotificationQueue(connection *amqp091.Connection) {
 	channel, err := connection.Channel()
@@ -19,6 +19,42 @@ func InitNotificationQueue(connection *amqp091.Connection) {
 	}
 
 	defer channel.Close()
+
+	err = channel.ExchangeDeclare(
+		utils.NOTIFICATION_QUEUE,
+		amqp091.ExchangeTopic,
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		log.Fatalf("Failed to declare an exchange: %v", err)
+	}
+
+	queue, err := channel.QueueDeclare(
+		utils.NOTIFICATION_QUEUE,
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	err = channel.QueueBind(
+		queue.Name,
+		"",
+		utils.NOTIFICATION_QUEUE,
+		false,
+		nil,
+	)
+	if err != nil {
+		log.Fatalf("Failed to bind the queue to the exchange: %v", err)
+	}
 
 	emailMsgs, err := channel.Consume(
 		utils.NOTIFICATION_QUEUE,
@@ -50,5 +86,5 @@ func InitNotificationQueue(connection *amqp091.Connection) {
 			}
 		}
 	}()
-	<- forever
+	<-forever
 }

@@ -17,10 +17,7 @@ type Application struct {
 }
 
 func (a *Application) Insert(db *gorm.DB) error {
-	if err := db.Create(a).Error; err != nil {
-		return err
-	}
-	return nil
+	return db.Create(a).Error
 }
 
 func (a *Application) FetchApplication(db *gorm.DB, q Application) (*Application, bool, error) {
@@ -35,8 +32,10 @@ func (a *Application) FetchApplication(db *gorm.DB, q Application) (*Application
 }
 
 func (a *Application) Update(db *gorm.DB, updates Application) error {
-	if err := db.Model(a).Where("id = ?", a.ID).Updates(updates).Error; err != nil {
-		return err
-	}
-	return nil
+	return db.Model(a).Where("id = ?", a.ID).Updates(updates).Error
+}
+
+func (a *Application) Delete(db *gorm.DB, condition *Application) error {
+	result := db.Where(&condition).Delete(a)
+	return result.Error
 }

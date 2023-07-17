@@ -24,8 +24,44 @@ func InitDBQueue(pgDb *gorm.DB, mongoClient *mongo.Client, connection *amqp091.C
 
 	defer channel.Close()
 
-	databaseTasks, err := channel.Consume(
+	err = channel.ExchangeDeclare(
 		utils.DATABASE_QUEUE,
+		amqp091.ExchangeTopic,
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		log.Fatalf("Failed to declare an exchange: %v", err)
+	}
+
+	queue, err := channel.QueueDeclare(
+		utils.DATABASE_QUEUE,
+		false,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	err = channel.QueueBind(
+		queue.Name,
+		"",
+		utils.DATABASE_QUEUE,
+		false,
+		nil,
+	)
+	if err != nil {
+		log.Fatalf("Failed to bind the queue to the exchange: %v", err)
+	}
+
+	databaseTasks, err := channel.Consume(
+		queue.Name,
 		"",
 		true,
 		false,

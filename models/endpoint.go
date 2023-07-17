@@ -50,3 +50,24 @@ func (e *Endpoint) Update(db *gorm.DB, updates Endpoint) error {
 	}
 	return nil
 }
+
+func (e *Endpoint) Delete(db *gorm.DB, condition *Endpoint) error {
+	result := db.Where(&condition).Delete(e)
+	return result.Error
+}
+
+func (e *Endpoint) FetchEndpoints(db *gorm.DB, q Endpoint) ([]Endpoint, error) {
+	var endpoints []Endpoint
+	if err := db.Where(q).Find(&endpoints).Error; err != nil {
+		return nil, err
+	}
+	return endpoints, nil
+}
+
+func (e *Endpoint) DeleteMany(db *gorm.DB, ids []uint) error {
+	result := db.Where("id IN ?", ids).Delete(&Endpoint{})
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}

@@ -39,21 +39,27 @@ func (d *Database) FetchDatabase(db *gorm.DB, q Database) (*Database, bool, erro
 	return &database, true, nil
 }
 
+func (d *Database) FetchDatabases(db *gorm.DB, q Database) ([]Database, error) {
+	var databases []Database
+	if err := db.Where(q).Find(&databases).Error; err != nil {
+		return nil, err
+	}
+	return databases, nil
+}
+
 func (d *Database) Update(db *gorm.DB, updates map[string]interface{}) error {
-	if err := db.Model(d).Where("id = ?", d.ID).Updates(updates).Error; err != nil {
-		return err
+	return db.Model(d).Where("id = ?", d.ID).Updates(updates).Error;
+}
+
+func (d *Database) Delete(db *gorm.DB, condition *Database) error {
+	result := db.Where(&condition).Delete(d)
+	return result.Error
+}
+
+func (d *Database) DeleteMany(db *gorm.DB, ids []uint) error {
+	result := db.Where("id IN ?", ids).Delete(&Database{})
+	if result.Error != nil {
+		return result.Error
 	}
 	return nil
 }
-
-func (d *Database) Delete(db *gorm.DB) error {
-	if err := db.Delete(d).Error; err != nil {
-		return err
-	}
-	return nil
-}
-
-
-
-
-

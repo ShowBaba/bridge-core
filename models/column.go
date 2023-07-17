@@ -47,3 +47,12 @@ func (c *Column) FetchColumns(db *gorm.DB, q Column) ([]Column, error) {
 	}
 	return columns, nil
 }
+
+// delete many by ids
+func (c *Column) DeleteMany(db *gorm.DB, ids []uint) error {
+	result := db.Where("id IN ?", ids).Delete(&Column{})
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}

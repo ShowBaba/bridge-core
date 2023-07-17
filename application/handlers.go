@@ -164,6 +164,149 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	w.Write(responseJSON)
 }
 
+func DeleteApplication(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	applicationIDStr, ok := vars["application_id"]
+	if !ok || applicationIDStr == "" {
+		utils.Dispatch400Error(w, "missing application_id in request")
+		return
+	}
+	userId := r.Context().Value("id").(uint)
+
+	// Validate application_id
+	if !ok || applicationIDStr == "" {
+		utils.Dispatch400Error(w, "invalid or missing application ID")
+		return
+	}
+
+	applicationID, err := strconv.Atoi(applicationIDStr)
+	if err != nil {
+		utils.Dispatch400Error(w, "invalid application ID format")
+		return
+	}
+
+	var application *models.Application
+	application, exist, err := application.FetchApplication(db, models.Application{ID: uint(applicationID), UserID: userId})
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	if !exist {
+		utils.Dispatch404Error(w, "cannot find application")
+		return
+	}
+	if err = application.Delete(db, &models.Application{ID: application.ID}); err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+
+	var endpoint models.Endpoint
+	var endpointIDs []uint
+	endpoints, err := endpoint.FetchEndpoints(db, models.Endpoint{ApplicationID: application.ID})
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	for _, endpoint := range endpoints {
+		endpointIDs = append(endpointIDs, endpoint.ID)
+	}
+	if err := endpoint.DeleteMany(db, endpointIDs); err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+
+	// delete other associating resources
+	go func() {
+		var database models.Database
+		databases, err := database.FetchDatabases(db, models.Database{ApplicationID: application.ID})
+		if err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+
+		var (
+			databaseIDs []uint
+			schemaIDs   []uint
+			tableIDs    []uint
+			columnIDs   []uint
+		)
+
+		for _, database := range databases {
+			databaseIDs = append(databaseIDs, database.ID)
+
+			var schema models.Schema
+			schemas, err := schema.FetchSchemas(db, models.Schema{DatabaseID: database.ID})
+			if err != nil {
+				utils.Dispatch500Error(w, err.Error())
+				return
+			}
+
+			for _, schema := range schemas {
+				schemaIDs = append(schemaIDs, schema.ID)
+
+				var table models.Table
+				tables, err := table.FetchTables(db, models.Table{SchemaID: schema.ID})
+				if err != nil {
+					utils.Dispatch500Error(w, err.Error())
+					return
+				}
+
+				for _, table := range tables {
+					tableIDs = append(tableIDs, table.ID)
+
+					var column models.Column
+					columns, err := column.FetchColumns(db, models.Column{TableID: table.ID})
+					if err != nil {
+						utils.Dispatch500Error(w, err.Error())
+						return
+					}
+
+					for _, column := range columns {
+						columnIDs = append(columnIDs, column.ID)
+					}
+				}
+			}
+		}
+
+		var column *models.Column
+		if err := column.DeleteMany(db, columnIDs); err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+
+		var table *models.Table
+		if err := table.DeleteMany(db, tableIDs); err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+
+		var schema *models.Schema
+		if err := schema.DeleteMany(db, schemaIDs); err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+
+		if err := database.DeleteMany(db, databaseIDs); err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+	}()
+
+	response := utils.APIResponse{
+		Status:  http.StatusOK,
+		Message: "application deleted successfully",
+	}
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	w.Write(responseJSON)
+}
+
 func AddDatabases(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")

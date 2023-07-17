@@ -148,7 +148,7 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	//TODO: only need to re-fetch database data if only credentials changed
 	databaseTask := utils.DatabaseTask{
 		DatabaseID: uint(databaseID),
-		UserID: userId,
+		UserID:     userId,
 	}
 	payload, err := json.Marshal(databaseTask)
 	if err != nil {
@@ -164,6 +164,143 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	response := utils.APIResponse{
 		Status:  http.StatusOK,
 		Message: "database updated successfully",
+	}
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	w.Write(responseJSON)
+}
+
+func DeleteDatabases(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	userId := r.Context().Value("id").(uint)
+
+	vars := mux.Vars(r)
+	databaseIDStr, ok := vars["database_id"]
+
+	if !ok || databaseIDStr == "" {
+		utils.Dispatch400Error(w, "invalid or missing database ID")
+		return
+	}
+
+	databaseID, err := strconv.Atoi(databaseIDStr)
+	if err != nil {
+		utils.Dispatch400Error(w, "invalid database ID format")
+		return
+	}
+
+	var database *models.Database
+
+	database, exist, err := database.FetchDatabase(db, models.Database{ID: uint(databaseID)})
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	if !exist {
+		utils.Dispatch404Error(w, "database with id not found")
+		return
+	}
+
+	var application *models.Application
+	application, exist, err = application.FetchApplication(db, models.Application{ID: database.ApplicationID, UserID: userId})
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+
+	if !exist {
+		utils.Dispatch404Error(w, "cannot find application")
+		return
+	}
+
+	if application.UserID != userId {
+		utils.Dispatch401Error(w, "unauthorized")
+		return
+	}
+
+	// delete other associating resources
+	go func() {
+		var database models.Database
+		databases, err := database.FetchDatabases(db, models.Database{ApplicationID: application.ID})
+		if err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+
+		var (
+			databaseIDs []uint
+			schemaIDs   []uint
+			tableIDs    []uint
+			columnIDs   []uint
+		)
+
+		for _, database := range databases {
+			databaseIDs = append(databaseIDs, database.ID)
+
+			var schema models.Schema
+			schemas, err := schema.FetchSchemas(db, models.Schema{DatabaseID: database.ID})
+			if err != nil {
+				utils.Dispatch500Error(w, err.Error())
+				return
+			}
+
+			for _, schema := range schemas {
+				schemaIDs = append(schemaIDs, schema.ID)
+
+				var table models.Table
+				tables, err := table.FetchTables(db, models.Table{SchemaID: schema.ID})
+				if err != nil {
+					utils.Dispatch500Error(w, err.Error())
+					return
+				}
+
+				for _, table := range tables {
+					tableIDs = append(tableIDs, table.ID)
+
+					var column models.Column
+					columns, err := column.FetchColumns(db, models.Column{TableID: table.ID})
+					if err != nil {
+						utils.Dispatch500Error(w, err.Error())
+						return
+					}
+
+					for _, column := range columns {
+						columnIDs = append(columnIDs, column.ID)
+					}
+				}
+			}
+		}
+
+		var column *models.Column
+		if err := column.DeleteMany(db, columnIDs); err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+
+		var table *models.Table
+		if err := table.DeleteMany(db, tableIDs); err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+
+		var schema *models.Schema
+		if err := schema.DeleteMany(db, schemaIDs); err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+
+		if err := database.DeleteMany(db, databaseIDs); err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
+	}()
+
+	response := utils.APIResponse{
+		Status:  http.StatusOK,
+		Message: "database deleted successfully",
 	}
 	responseJSON, err := json.Marshal(response)
 	if err != nil {

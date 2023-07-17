@@ -34,13 +34,10 @@ func (t *Table) FetchTableByNameAndSchemaID(db *gorm.DB) (*Table, bool, error) {
 }
 
 func (t *Table) Update(db *gorm.DB, updates Table) error {
-	if err := db.Model(t).Where("id = ?", t.ID).Updates(updates).Error; err != nil {
-		return err
-	}
-	return nil
+	return db.Model(t).Where("id = ?", t.ID).Updates(updates).Error
 }
 
-func (a *Table) FetchTable(db *gorm.DB, q Table) (*Table, bool, error) {
+func (t *Table) FetchTable(db *gorm.DB, q Table) (*Table, bool, error) {
 	var table Table
 	if err := db.Where(q).First(&table).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -49,4 +46,20 @@ func (a *Table) FetchTable(db *gorm.DB, q Table) (*Table, bool, error) {
 		return nil, false, err
 	}
 	return &table, true, nil
+}
+
+func (t *Table) DeleteMany(db *gorm.DB, ids []uint) error {
+	result := db.Where("id IN ?", ids).Delete(&Table{})
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func (t *Table) FetchTables(db *gorm.DB, q Table) ([]Table, error) {
+	var tables []Table
+	if err := db.Where(q).Find(&tables).Error; err != nil {
+		return nil, err
+	}
+	return tables, nil
 }
