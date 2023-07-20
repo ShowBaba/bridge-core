@@ -9,7 +9,6 @@ import (
 
 type Database struct {
 	ID            uint `gorm:"primaryKey"`
-	Name          string
 	Host          string
 	Port          uint
 	Database      string

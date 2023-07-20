@@ -1,7 +1,6 @@
 package database
 
 type UpdateDatabasePayload struct {
-	Name     string `json:"name"`
 	Host     string `json:"host"`
 	Port     uint   `json:"port"`
 	Database string `json:"database"`

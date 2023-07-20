@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"github.com/graphql-go/graphql"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 func RunGQL(w http.ResponseWriter, r *http.Request, schema graphql.Schema, ctx context.Context) {

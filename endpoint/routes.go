@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 	"go.mongodb.org/mongo-driver/mongo"
 	"gorm.io/gorm"
 )

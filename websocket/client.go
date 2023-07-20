@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )

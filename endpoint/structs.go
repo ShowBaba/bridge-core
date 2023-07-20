@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/showbaba/query-bridge/bridge/models"
+	"github.com/showbaba/query-bridge/bridge-core/models"
 )
 
 type CreateEndpointInput struct {

@@ -11,8 +11,8 @@ import (
 	"github.com/go-playground/validator"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
-	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 func CreateEndpointHandler(w http.ResponseWriter, r *http.Request) {

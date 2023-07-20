@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/showbaba/query-bridge/bridge/models"
+	"github.com/showbaba/query-bridge/bridge-core/models"
 	"gorm.io/gorm"
 )
 

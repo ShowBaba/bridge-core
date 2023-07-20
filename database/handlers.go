@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-playground/validator"
 	"github.com/gorilla/mux"
-	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 // re-fetch database information
@@ -73,15 +73,17 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.Name != "" {
-		_, exist, err := database.FetchDatabase(db, models.Database{Name: input.Name, ApplicationID: database.ApplicationID})
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-		if exist {
-			utils.Dispatch400Error(w, "duplicate database name")
-			return
+	if input.Database != "" {
+		if input.Host == "" || input.Host != database.Host {
+			_, exist, err := database.FetchDatabase(db, models.Database{Database: input.Database, Host: database.Host, ApplicationID: database.ApplicationID})
+			if err != nil {
+				utils.Dispatch500Error(w, err.Error())
+				return
+			}
+			if exist {
+				utils.Dispatch400Error(w, "duplicate database name")
+				return
+			}
 		}
 	}
 	// test the connection in case any crucial changes was made
@@ -110,7 +112,6 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dbConn, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
-		Name:     input.Name,
 		Host:     input.Host,
 		Port:     input.Port,
 		Database: input.Database,
@@ -132,7 +133,6 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = database.Update(db, map[string]interface{}{
-		"Name":     input.Name,
 		"Host":     input.Host,
 		"Port":     input.Port,
 		"Database": input.Database,

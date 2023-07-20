@@ -3,7 +3,7 @@ package notification
 import (
 	"net/smtp"
 
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 func SendEmail(mail utils.Mail) error {

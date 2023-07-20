@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 func HandleEmailMsg(ctx context.Context, payload EmailMsgPayload) error {

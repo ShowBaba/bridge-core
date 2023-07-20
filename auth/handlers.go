@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator"
-	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 func OpenSqlxConnection(dbModel *models.Database) (*sqlx.DB, error) {

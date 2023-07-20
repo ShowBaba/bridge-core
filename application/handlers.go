@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-playground/validator"
 	"github.com/gorilla/mux"
-	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 func CreateApplication(w http.ResponseWriter, r *http.Request) {
@@ -359,7 +359,7 @@ func AddDatabases(w http.ResponseWriter, r *http.Request) {
 	// validate duplicate db name
 	var database *models.Database
 
-	_, exist, err = database.FetchDatabase(db, models.Database{Name: input.Name, ApplicationID: uint(applicationID)})
+	_, exist, err = database.FetchDatabase(db, models.Database{Database: input.Database, Host: input.Host, ApplicationID: uint(applicationID)})
 	if err != nil {
 		utils.Dispatch500Error(w, err.Error())
 		return
@@ -370,7 +370,6 @@ func AddDatabases(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dbConn, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
-		Name:     input.Name,
 		Host:     input.Host,
 		Port:     input.Port,
 		Database: input.Database,
@@ -392,7 +391,6 @@ func AddDatabases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	database = &models.Database{
-		Name:          input.Name,
 		Host:          input.Host,
 		Port:          input.Port,
 		Database:      input.Database,

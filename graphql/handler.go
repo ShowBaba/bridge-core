@@ -4,8 +4,8 @@ import (
 	"log"
 
 	"github.com/graphql-go/graphql"
-	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 	"gorm.io/gorm"
 )
 

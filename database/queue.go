@@ -8,8 +8,8 @@ import (
 	"sync"
 
 	"github.com/rabbitmq/amqp091-go"
-	"github.com/showbaba/query-bridge/bridge/models"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 	"go.mongodb.org/mongo-driver/mongo"
 	"gorm.io/gorm"
 )
@@ -101,7 +101,6 @@ func InitDBQueue(pgDb *gorm.DB, mongoClient *mongo.Client, connection *amqp091.C
 					return
 				}
 				appDbPg, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
-					Name:     database.Name,
 					Host:     database.Host,
 					Port:     database.Port,
 					Database: database.Database,

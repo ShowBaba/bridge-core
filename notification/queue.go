@@ -7,7 +7,7 @@ import (
 	"log"
 
 	"github.com/rabbitmq/amqp091-go"
-	"github.com/showbaba/query-bridge/bridge/utils"
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 var ctx = context.Background()
