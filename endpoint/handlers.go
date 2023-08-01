@@ -43,6 +43,19 @@ func CreateEndpointHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	vars := mux.Vars(r)
+	database_id, ok := vars["database_id"]
+	if !ok || database_id == "" {
+		utils.Dispatch400Error(w, "missing database_id in request")
+		return
+	}
+
+	database_id_num, err := strconv.ParseUint(database_id, 10, 64)
+	if err != nil {
+		fmt.Println("Failed to convert string to uint:", err)
+		return
+	}
+
 	if input.OrderDirection != "" {
 		err = input.ValidateOrderDirection()
 		if err != nil {
@@ -67,7 +80,7 @@ func CreateEndpointHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var table *models.Table
-	table, exist, err = table.FetchTable(db, models.Table{ID: input.TableID})
+	table, exist, err = table.FetchTable(db, models.Table{ID: input.TableID, DatabaseID: uint(database_id_num)})
 	if err != nil {
 		utils.Dispatch500Error(w, err.Error())
 		return
@@ -155,6 +168,7 @@ func CreateEndpointHandler(w http.ResponseWriter, r *http.Request) {
 		OrderBy:        input.OrderBy,
 		OrderDirection: input.OrderDirection,
 		Columns:        input.Columns,
+		DatabaseID:    uint(database_id_num),
 	}
 	err = endpoint.Insert(db)
 	if err != nil {

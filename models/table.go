@@ -8,11 +8,12 @@ import (
 )
 
 type Table struct {
-	ID        uint `gorm:"primaryKey"`
-	SchemaID  uint `json:"schema_id"`
-	Name      string
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         uint `gorm:"primaryKey"`
+	SchemaID   uint `json:"schema_id"`
+	DatabaseID uint `json:"database_id"`
+	Name       string
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func (t *Table) Insert(db *gorm.DB) (uint, error) {

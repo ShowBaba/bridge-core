@@ -37,7 +37,6 @@ var DatabaseType = graphql.NewObject(
 		Name: "Database",
 		Fields: graphql.Fields{
 			"ID":            &graphql.Field{Type: graphql.Int},
-			"Name":          &graphql.Field{Type: graphql.String},
 			"Host":          &graphql.Field{Type: graphql.String},
 			"Port":          &graphql.Field{Type: graphql.Int},
 			"Database":      &graphql.Field{Type: graphql.String},
@@ -71,6 +70,7 @@ var EndpointType = graphql.NewObject(
 			"ID":             &graphql.Field{Type: graphql.Int},
 			"Name":           &graphql.Field{Type: graphql.String},
 			"ApplicationID":  &graphql.Field{Type: graphql.Int},
+			"DatabaseID": &graphql.Field{Type: graphql.Int},
 			"TableID":        &graphql.Field{Type: graphql.Int},
 			"Limit":          &graphql.Field{Type: graphql.Int},
 			"OrderBy":        &graphql.Field{Type: graphql.String},
@@ -114,11 +114,12 @@ var TableType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Table",
 		Fields: graphql.Fields{
-			"ID":        &graphql.Field{Type: graphql.Int},
-			"SchemaID":  &graphql.Field{Type: graphql.Int},
-			"Name":      &graphql.Field{Type: graphql.String},
-			"CreatedAt": &graphql.Field{Type: graphql.DateTime},
-			"UpdatedAt": &graphql.Field{Type: graphql.DateTime},
+			"ID":         &graphql.Field{Type: graphql.Int},
+			"SchemaID":   &graphql.Field{Type: graphql.Int},
+			"Name":       &graphql.Field{Type: graphql.String},
+			"DatabaseID": &graphql.Field{Type: graphql.Int},
+			"CreatedAt":  &graphql.Field{Type: graphql.DateTime},
+			"UpdatedAt":  &graphql.Field{Type: graphql.DateTime},
 		},
 	},
 )

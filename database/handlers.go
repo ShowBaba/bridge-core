@@ -223,53 +223,47 @@ func DeleteDatabases(w http.ResponseWriter, r *http.Request) {
 
 	// delete other associating resources
 	go func() {
-		var database models.Database
-		databases, err := database.FetchDatabases(db, models.Database{ApplicationID: application.ID})
+		database, _, err := database.FetchDatabase(db, models.Database{ApplicationID: application.ID})
 		if err != nil {
 			utils.Dispatch500Error(w, err.Error())
 			return
 		}
 
 		var (
-			databaseIDs []uint
-			schemaIDs   []uint
-			tableIDs    []uint
-			columnIDs   []uint
+			schemaIDs []uint
+			tableIDs  []uint
+			columnIDs []uint
 		)
 
-		for _, database := range databases {
-			databaseIDs = append(databaseIDs, database.ID)
+		var schema models.Schema
+		schemas, err := schema.FetchSchemas(db, models.Schema{DatabaseID: database.ID})
+		if err != nil {
+			utils.Dispatch500Error(w, err.Error())
+			return
+		}
 
-			var schema models.Schema
-			schemas, err := schema.FetchSchemas(db, models.Schema{DatabaseID: database.ID})
+		for _, schema := range schemas {
+			schemaIDs = append(schemaIDs, schema.ID)
+
+			var table models.Table
+			tables, err := table.FetchTables(db, models.Table{SchemaID: schema.ID})
 			if err != nil {
 				utils.Dispatch500Error(w, err.Error())
 				return
 			}
 
-			for _, schema := range schemas {
-				schemaIDs = append(schemaIDs, schema.ID)
+			for _, table := range tables {
+				tableIDs = append(tableIDs, table.ID)
 
-				var table models.Table
-				tables, err := table.FetchTables(db, models.Table{SchemaID: schema.ID})
+				var column models.Column
+				columns, err := column.FetchColumns(db, models.Column{TableID: table.ID})
 				if err != nil {
 					utils.Dispatch500Error(w, err.Error())
 					return
 				}
 
-				for _, table := range tables {
-					tableIDs = append(tableIDs, table.ID)
-
-					var column models.Column
-					columns, err := column.FetchColumns(db, models.Column{TableID: table.ID})
-					if err != nil {
-						utils.Dispatch500Error(w, err.Error())
-						return
-					}
-
-					for _, column := range columns {
-						columnIDs = append(columnIDs, column.ID)
-					}
+				for _, column := range columns {
+					columnIDs = append(columnIDs, column.ID)
 				}
 			}
 		}
@@ -286,17 +280,17 @@ func DeleteDatabases(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var schema *models.Schema
 		if err := schema.DeleteMany(db, schemaIDs); err != nil {
 			utils.Dispatch500Error(w, err.Error())
 			return
 		}
 
-		if err := database.DeleteMany(db, databaseIDs); err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
 	}()
+
+	if err := database.Delete(db, &models.Database{ID: database.ID}); err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
 
 	response := utils.APIResponse{
 		Status:  http.StatusOK,

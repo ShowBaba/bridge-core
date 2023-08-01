@@ -112,8 +112,7 @@ func Init(db *gorm.DB) *graphql.Object {
 						tx        *gorm.DB
 						endpoints []models.Endpoint
 					)
-					tx = db.Model(&models.Endpoint{}).Joins("JOIN tables ON endpoints.table_id = tables.id").
-						Joins("JOIN applications ON endpoints.application_id = applications.id")
+					tx = db.Model(&models.Endpoint{})
 					tx = parseDbClause(params, tx, EndpointType)
 					res := tx.Debug().Scan(&endpoints)
 					if res.RowsAffected > 0 {
@@ -155,7 +154,7 @@ func Init(db *gorm.DB) *graphql.Object {
 						tx     *gorm.DB
 						tables []models.Table
 					)
-					tx = db.Model(&models.Table{}).Joins("JOIN schemas ON tables.schema_id = schemas.id")
+					tx = db.Model(&models.Table{})
 					tx = parseDbClause(params, tx, TableType)
 					res := tx.Debug().Scan(&tables)
 					if res.RowsAffected > 0 {

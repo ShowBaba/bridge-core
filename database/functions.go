@@ -147,8 +147,9 @@ func StoreData(db *gorm.DB, dbID uint, ch <-chan utils.SchemaData, errCh chan<- 
 		}
 		for _, tableData := range data.Tables {
 			table := &models.Table{
-				SchemaID: schemaID,
-				Name:     tableData.Table,
+				SchemaID:   schemaID,
+				Name:       tableData.Table,
+				DatabaseID: dbID,
 			}
 			var tableID uint
 			existingTable, exist, err := table.FetchTableByNameAndSchemaID(db)

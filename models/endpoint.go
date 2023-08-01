@@ -22,6 +22,7 @@ type Endpoint struct {
 	Limit          uint           `json:"limit"`
 	OrderBy        string         `json:"order_by"`
 	OrderDirection string         `json:"order_direction"`
+	DatabaseID uint `json:"database_id"`
 	CreatedAt      time.Time      `json:"created_at"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 }

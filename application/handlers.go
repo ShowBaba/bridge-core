@@ -312,10 +312,10 @@ func AddDatabases(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	var input AddDatabasePayload
 	if body, err := io.ReadAll(r.Body); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
+		utils.Dispatch400Error(w, fmt.Sprintf("invalid body: %s", err.Error()))
 		return
 	} else if err := json.Unmarshal(body, &input); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
+		utils.Dispatch400Error(w, fmt.Sprintf("invalid body: %s", err.Error()))
 		return
 	}
 	validate := validator.New()

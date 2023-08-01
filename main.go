@@ -126,7 +126,7 @@ func Run(r *mux.Router, host string) {
 			host,
 			handlers.CORS(
 				handlers.AllowCredentials(),
-				handlers.AllowedMethods([]string{"POST", "GET", "PUT", "OPTIONS"}),
+				handlers.AllowedMethods([]string{"POST", "GET", "PUT", "OPTIONS", "DELETE", "PATCH"}),
 				handlers.AllowedHeaders([]string{"Authorization", "Content-Type"}),
 				handlers.MaxAge(3600),
 			)(r),

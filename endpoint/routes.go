@@ -19,7 +19,7 @@ var (
 func InitializeEndpointRoutes(router *mux.Router, dbClient *gorm.DB, mongoCl *mongo.Client) {
 	db = dbClient
 	mongoClient = mongoCl
-	router.HandleFunc("/create", utils.ValidateAuthHeaderToken(http.HandlerFunc(CreateEndpointHandler))).Methods("POST")
+	router.HandleFunc("/{database_id}/create", utils.ValidateAuthHeaderToken(http.HandlerFunc(CreateEndpointHandler))).Methods("POST")
 	router.HandleFunc("/execute/{identifier}", utils.ValidateAuthHeaderToken(http.HandlerFunc(ExecuteEndpointHandler))).Methods("POST")
 	router.HandleFunc("/update/{endpoint_id}", utils.ValidateAuthHeaderToken(http.HandlerFunc(UpdateEndpointHandler))).Methods("PATCH")
 }
