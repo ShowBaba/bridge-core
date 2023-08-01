@@ -41,7 +41,7 @@ func Init(db *gorm.DB) *graphql.Object {
 						tx           *gorm.DB
 						applications []models.Application
 					)
-					tx = db.Model(&models.Application{}).Joins("JOIN users ON applications.user_id = users.id")
+					tx = db.Model(&models.Application{})
 					tx = parseDbClause(params, tx, ApplicationType)
 					res := tx.Debug().Scan(&applications)
 					if res.RowsAffected > 0 {

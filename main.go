@@ -83,8 +83,11 @@ func main() {
 		return
 	}
 	port := utils.GetConfig().Port
+	if port == "" {
+		port = "8080"
+	}
 	log.Printf("starting server on port: %s", port)
-	Run(router, port)
+	Run(router, fmt.Sprintf(`:%s`, port))
 	wg.Wait()
 }
 
