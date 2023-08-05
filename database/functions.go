@@ -35,7 +35,6 @@ func FetchSchemaTables(db *sql.DB, sqlLogCh chan<- string, result chan<- utils.S
 			tableData = append(tableData, utils.TableData{Table: table, Columns: columns})
 		}
 		result <- utils.SchemaData{Schema: schema, Tables: tableData}
-
 	}
 }
 
@@ -119,11 +118,12 @@ func LogSqlQuery(mongoClient *mongo.Client, applicationID uint, userID uint, ch 
 	}
 }
 
-func StoreData(db *gorm.DB, dbID uint, ch <-chan utils.SchemaData, errCh chan<- error) {
+func StoreData(db *gorm.DB, dbID, userID uint, ch <-chan utils.SchemaData, errCh chan<- error) {
 	for data := range ch {
 		schema := &models.Schema{
 			DatabaseID: dbID,
 			Name:       data.Schema,
+			UserID:     userID,
 		}
 		var schemaID uint
 		existingSchema, exist, err := schema.FetchSchemaByNameAndDatabaseID(db)
@@ -150,6 +150,7 @@ func StoreData(db *gorm.DB, dbID uint, ch <-chan utils.SchemaData, errCh chan<- 
 				SchemaID:   schemaID,
 				Name:       tableData.Table,
 				DatabaseID: dbID,
+				UserID:     userID,
 			}
 			var tableID uint
 			existingTable, exist, err := table.FetchTableByNameAndSchemaID(db)
@@ -175,6 +176,7 @@ func StoreData(db *gorm.DB, dbID uint, ch <-chan utils.SchemaData, errCh chan<- 
 				column := &models.Column{
 					TableID: tableID,
 					Name:    column,
+					UserID:  userID,
 				}
 				_, exist, err := column.FetchColumnByNameAndTableID(db)
 				if err != nil {

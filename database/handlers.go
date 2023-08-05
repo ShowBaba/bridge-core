@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,8 @@ import (
 	"github.com/showbaba/query-bridge/bridge-core/models"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
+
+var ctx = context.Background()
 
 // re-fetch database information
 func UpdateDatabase(w http.ResponseWriter, r *http.Request) {

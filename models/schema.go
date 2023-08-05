@@ -11,6 +11,7 @@ type Schema struct {
 	ID         uint `gorm:"primaryKey"`
 	DatabaseID uint `json:"database_id"`
 	Name       string
+	UserID     uint      `json:"user_id"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

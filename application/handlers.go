@@ -398,6 +398,7 @@ func AddDatabases(w http.ResponseWriter, r *http.Request) {
 		Password:      encryptedPassword,
 		DbEngine:      input.DbEngine,
 		ApplicationID: uint(applicationID),
+		UserID:        userId,
 	}
 	id, err := database.Insert(db)
 	if err != nil {

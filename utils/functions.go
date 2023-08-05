@@ -47,8 +47,8 @@ func ValidateAuthHeaderToken(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		// set values in the request context
-		ctx := context.WithValue(r.Context(), keyEmail, claim.Email)
-		ctx = context.WithValue(r.Context(), keyID, claim.ID)
+		ctx := context.WithValue(r.Context(), KeyEmail, claim.Email)
+		ctx = context.WithValue(r.Context(), KeyID, claim.ID)
 		r = r.WithContext(ctx)
 		next(w, r)
 	}
@@ -139,38 +139,6 @@ func PublishMessageToQueue(ctx context.Context, conn *amqp091.Connection, messag
 		return err
 	}
 	defer ch.Close()
-
-	q, err := ch.QueueDeclare(
-		queueName,
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-
-	err = ch.QueueBind(q.Name, q.Name, queueName, false, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = ch.PublishWithContext(
-		ctx,
-		"",
-		q.Name,
-		false,
-		false,
-		amqp091.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(message),
-		},
-	)
-	if err != nil {
-		return err
-	}
 
 	err = ch.PublishWithContext(ctx, queueName, "", false, false, amqp091.Publishing{
 		ContentType: "text/plain",

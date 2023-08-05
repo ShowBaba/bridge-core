@@ -11,6 +11,7 @@ type Column struct {
 	ID        uint `gorm:"primaryKey"`
 	TableID   uint `json:"table_id"`
 	Name      string
+	UserID    uint      `json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

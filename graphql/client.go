@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/graphql-go/graphql"
@@ -23,8 +23,14 @@ func RunGQL(w http.ResponseWriter, r *http.Request, schema graphql.Schema, ctx c
 		return
 	}
 
+	userId, ok := r.Context().Value("id").(uint)
+	if !ok {
+		utils.Dispatch401Error(w, "Unauthorized access; id missing")
+		return
+	}
+
 	// Read the query
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		utils.Dispatch400Error(w, "invalid request body: %s")
 		return
@@ -35,8 +41,9 @@ func RunGQL(w http.ResponseWriter, r *http.Request, schema graphql.Schema, ctx c
 		resp    *graphql.Result
 	)
 
+	ctx = context.WithValue(ctx, utils.KeyID, userId)
+
 	if err := json.Unmarshal(body, &payload); err == nil {
-		// Perform GraphQL request
 		resp = graphql.Do(graphql.Params{
 			Schema:         schema,
 			RequestString:  payload.Query,

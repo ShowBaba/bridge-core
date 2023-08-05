@@ -2,7 +2,7 @@
 
 QueryBridge is an open-source project that aims to provide an easy way for users to create endpoints for performing CRUD (Create, Read, Update, Delete) operations on any number of databases. The platform allows users to eliminate the need for a dedicated backend service by providing a simple and direct interface for managing database connections and creating custom endpoints.
 
-![Project Logo](Logo.png) <!-- Optional: Include a logo or image representing the project -->
+![Project Logo](Logo.png) 
 
 ## User Journey
 

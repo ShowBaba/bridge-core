@@ -16,6 +16,7 @@ type Database struct {
 	Password      string
 	DbEngine      string    `json:"db_engine"`
 	ApplicationID uint      `json:"application_id"`
+	UserID uint `json:"user_id"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }

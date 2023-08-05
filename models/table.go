@@ -11,6 +11,7 @@ type Table struct {
 	ID         uint `gorm:"primaryKey"`
 	SchemaID   uint `json:"schema_id"`
 	DatabaseID uint `json:"database_id"`
+	UserID    uint      `json:"user_id"`
 	Name       string
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`

@@ -8,8 +8,8 @@ import (
 
 const (
 	DbTimeout                                 = time.Second * 3
-	keyEmail                           string = "email"
-	keyID                              string = "id"
+	KeyEmail                           string = "email"
+	KeyID                              string = "id"
 	NOTIFICATION_QUEUE                        = "NOTIFICATIONS_QUEUE"
 	DATABASE_QUEUE                            = "DATABASE_QUEUE"
 	MAIL_USERNAME                             = "noreply@bridge.com"

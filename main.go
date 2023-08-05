@@ -61,7 +61,9 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		database.InitDBQueue(dbCl, mongoClient, qConn)
+		if err := database.InitDBQueue(dbCl, mongoClient, qConn); err != nil {
+			panic(err)
+		}
 	}()
 	wg.Add(1)
 	go func() {
@@ -94,9 +96,9 @@ func main() {
 func InitializeRoutes(router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Connection,
 	mongoClient *mongo.Client) {
 	// graphql route
-	router.HandleFunc("/gql", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/gql", utils.ValidateAuthHeaderToken(func(w http.ResponseWriter, r *http.Request) {
 		gql.RunGQL(w, r, schema, ctx)
-	}).Methods("POST", "OPTIONS")
+	})).Methods("POST", "OPTIONS")
 
 	// log stream route
 	router.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +118,7 @@ func InitializeRoutes(router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Co
 
 	databaseRoutes := router.PathPrefix("/database").Subrouter()
 	database.InitializeApplicationRoutes(databaseRoutes, dbCl, qConnection)
-	
+
 	endpointRoutes := router.PathPrefix("/endpoint").Subrouter()
 	endpoint.InitializeEndpointRoutes(endpointRoutes, dbCl, mongoClient)
 }

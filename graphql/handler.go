@@ -1,6 +1,7 @@
 package graphql
 
 import (
+	"errors"
 	"log"
 
 	"github.com/graphql-go/graphql"
@@ -16,12 +17,17 @@ func Init(db *gorm.DB) *graphql.Object {
 			"users": makeListField(
 				makeNodeListType("UserList", UserType),
 				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(uint)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
 					var (
 						list  ListResult
 						tx    *gorm.DB
 						users []models.User
 					)
 					tx = parseDbClause(params, db.Model(&models.User{}), UserType)
+					tx = tx.Where("id = ?", userID)
 					res := tx.Debug().Scan(&users)
 					if res.RowsAffected > 0 {
 						list.Nodes = []interface{}{}
@@ -36,12 +42,17 @@ func Init(db *gorm.DB) *graphql.Object {
 			"applications": makeListField(
 				makeNodeListType("ApplicationList", ApplicationType),
 				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(uint)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
 					var (
 						list         ListResult
 						tx           *gorm.DB
 						applications []models.Application
 					)
 					tx = db.Model(&models.Application{})
+					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, ApplicationType)
 					res := tx.Debug().Scan(&applications)
 					if res.RowsAffected > 0 {
@@ -65,12 +76,17 @@ func Init(db *gorm.DB) *graphql.Object {
 			"databases": makeListField(
 				makeNodeListType("DatabaseList", DatabaseType),
 				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(uint)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
 					var (
 						list      ListResult
 						tx        *gorm.DB
 						databases []models.Database
 					)
-					tx = db.Model(&models.Database{}).Joins("JOIN applications ON databases.application_id = applications.id")
+					tx = db.Model(&models.Database{})
+					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, DatabaseType)
 					res := tx.Debug().Scan(&databases)
 					if res.RowsAffected > 0 {
@@ -86,12 +102,17 @@ func Init(db *gorm.DB) *graphql.Object {
 			"columns": makeListField(
 				makeNodeListType("ColumnList", ColumnType),
 				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(uint)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
 					var (
 						list    ListResult
 						tx      *gorm.DB
 						columns []models.Column
 					)
-					tx = db.Model(&models.Column{}).Joins("JOIN tables ON columns.table_id = tables.id")
+					tx = db.Model(&models.Column{})
+					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, ColumnType)
 					res := tx.Debug().Scan(&columns)
 					if res.RowsAffected > 0 {
@@ -107,12 +128,17 @@ func Init(db *gorm.DB) *graphql.Object {
 			"endpoints": makeListField(
 				makeNodeListType("EndpointList", EndpointType),
 				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(uint)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
 					var (
 						list      ListResult
 						tx        *gorm.DB
 						endpoints []models.Endpoint
 					)
 					tx = db.Model(&models.Endpoint{})
+					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, EndpointType)
 					res := tx.Debug().Scan(&endpoints)
 					if res.RowsAffected > 0 {
@@ -128,12 +154,18 @@ func Init(db *gorm.DB) *graphql.Object {
 			"schemas": makeListField(
 				makeNodeListType("SchemaList", SchemaType),
 				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(uint)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
 					var (
 						list    ListResult
 						tx      *gorm.DB
 						schemas []models.Schema
 					)
-					tx = db.Model(&models.Schema{}).Joins("JOIN databases ON schemas.database_id = databases.id")
+					tx = db.Model(&models.Schema{})
+					tx = tx.Where("user_id = ?", userID)
+
 					tx = parseDbClause(params, tx, SchemaType)
 					res := tx.Debug().Scan(&schemas)
 					if res.RowsAffected > 0 {
@@ -149,12 +181,17 @@ func Init(db *gorm.DB) *graphql.Object {
 			"tables": makeListField(
 				makeNodeListType("TableList", TableType),
 				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(uint)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
 					var (
 						list   ListResult
 						tx     *gorm.DB
 						tables []models.Table
 					)
 					tx = db.Model(&models.Table{})
+					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, TableType)
 					res := tx.Debug().Scan(&tables)
 					if res.RowsAffected > 0 {
