@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func FetchSchemaTables(db *sql.DB, sqlLogCh chan<- string, result chan<- utils.SchemaData, errCh chan<- error) {
+func FetchDatabaseInfo(db *sql.DB, sqlLogCh chan<- string, result chan<- utils.SchemaData, errCh chan<- error) {
 	var err error
 
 	schemas, err := FetchSchemas(db, sqlLogCh)
@@ -87,7 +87,7 @@ func FetchTables(db *sql.DB, schema string, sqlLogCh chan<- string) ([]string, e
 func FetchColumns(db *sql.DB, schema, tableName string, sqlLogCh chan<- string) ([]string, error) {
 	var columns []string
 
-	query := fmt.Sprintf(`SELECT column_name FROM information_schema.columns WHERE table_schema = '%s' AND table_name = '%s'`, schema, tableName)
+	query := fmt.Sprintf(`SELECT column_name FROM information_schema.columns WHERE table_schema = '%s' AND table_name = '%s' AND column_name NOT LIKE 'pg_%%' AND column_name NOT LIKE 'sys_%%'`, schema, tableName)
 	sqlLogCh <- query
 
 	rows, err := db.Query(query)

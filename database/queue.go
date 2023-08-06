@@ -1,7 +1,6 @@
 package database
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,7 +13,14 @@ import (
 	"gorm.io/gorm"
 )
 
-func InitDBQueue(pgDb *gorm.DB, mongoClient *mongo.Client, connection *amqp091.Connection) error {
+var (
+	pgDbCLient  *gorm.DB
+	mongoClient *mongo.Client
+)
+
+func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connection) error {
+	pgDbCLient = pg
+	mongoClient = mongo
 	channel, err := connection.Channel()
 	if err != nil {
 		return err
@@ -71,18 +77,29 @@ func InitDBQueue(pgDb *gorm.DB, mongoClient *mongo.Client, connection *amqp091.C
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	numWorkers := 10
-	taskCh := make(chan utils.DatabaseTask)
-	wg := sync.WaitGroup{}
-	taskWg := sync.WaitGroup{}
+	var (
+		TOTAL_WORKERS = 10
+		requestCh     = make(chan utils.DatabaseTask, TOTAL_WORKERS)
+		errorCh       = make(chan error, 1) // handles error from a worker
+		waitGroup     = &sync.WaitGroup{}
+	)
 
 	// Start worker pool
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go processTask(&wg, &taskWg, ctx, taskCh, pgDb, mongoClient)
+	for i := 0; i < TOTAL_WORKERS; i++ {
+		worker := &Worker{
+			id:        i,
+			waitGroup: waitGroup,
+			requestCh: requestCh,
+			quitCh:    make(chan bool, 2),
+			errorCh:   errorCh,
+		}
+		go worker.run()
+		go func(workerID int, errorCh chan error) {
+			for err := range errorCh {
+				log.Printf("Error from worker %v: %s", workerID, err)
+				// TODO: store logs for application
+			}
+		}(i, errorCh)
 	}
 
 	for databaseTask := range databaseTasks {
@@ -92,42 +109,52 @@ func InitDBQueue(pgDb *gorm.DB, mongoClient *mongo.Client, connection *amqp091.C
 			log.Println("error unmarshalling message:", err)
 			continue
 		}
-		taskCh <- task
+		requestCh <- task
 	}
 
-	log.Printf("Clean up")
-	cancel()  // signal workers to stop
-	wg.Wait() // wait for all workers to finish
+	go func() {
+		waitGroup.Wait()
+		close(requestCh)
+		close(errorCh)
+	}()
 
 	return nil
 }
 
-func processTask(wg *sync.WaitGroup, taskWg *sync.WaitGroup, ctx context.Context, taskCh <-chan utils.DatabaseTask, pgDb *gorm.DB, mongoClient *mongo.Client) {
-	defer wg.Done()
+type Worker struct {
+	id        int
+	waitGroup *sync.WaitGroup
+	requestCh chan utils.DatabaseTask
+	errorCh   chan error
+	quitCh    chan bool
+}
+
+func (w Worker) run() {
+	log.Printf("worker [%v] running", w.id)
+	w.waitGroup.Add(1)
+	defer w.waitGroup.Done()
+
 Loop:
 	for {
 		select {
-		case task, ok := <-taskCh:
+		case task, ok := <-w.requestCh:
 			if !ok {
 				break Loop
-			}
-
-			taskWg.Add(1)
-			go func(task utils.DatabaseTask) {
-				defer taskWg.Done()
-				err := handleTask(ctx, task, pgDb, mongoClient)
+			} else {
+				err := handleTask(task, pgDbCLient, mongoClient)
 				if err != nil {
-					log.Printf("Error processing task: %v", err)
 					// TODO: send notification to user, add endpoint to re-fetch db data
+					log.Printf("error processing task: %v, from worker: %v", err, w.id)
+					w.errorCh <- err
 				}
-			}(task)
-		case <-ctx.Done():
+			}
+		case <-w.quitCh:
 			break Loop
 		}
 	}
 }
 
-func handleTask(ctx context.Context, task utils.DatabaseTask, pgDb *gorm.DB, mongoClient *mongo.Client) error {
+func handleTask(task utils.DatabaseTask, pgDb *gorm.DB, mongoClient *mongo.Client) error {
 	var database *models.Database
 	database, _, err := database.FetchDatabase(pgDb, models.Database{ID: task.DatabaseID})
 	if err != nil {
@@ -160,7 +187,7 @@ func handleTask(ctx context.Context, task utils.DatabaseTask, pgDb *gorm.DB, mon
 
 	go func() {
 		defer wg.Done()
-		FetchSchemaTables(appDbPg, sqlLogCh, resultCh, errorCh)
+		FetchDatabaseInfo(appDbPg, sqlLogCh, resultCh, errorCh)
 	}()
 
 	go func() {

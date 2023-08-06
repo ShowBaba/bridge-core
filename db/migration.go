@@ -7,13 +7,13 @@ import (
 
 func Migrate(db *gorm.DB) {
 	db.AutoMigrate(
-		&models.Application{},
-		&models.User{},
-		&models.Database{},
-		&models.Schema{},
-		&models.Table{},
-		&models.Column{},
-		&models.Endpoint{},
+		// &models.Application{},
+		// &models.User{},
+		// &models.Database{},
+		// &models.Schema{},
+		// &models.Table{},
+		// &models.Column{},
+		// &models.Endpoint{},
 	)
 
 	db.Model(&models.Application{}).Association("UserID")

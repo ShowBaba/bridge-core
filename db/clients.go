@@ -31,7 +31,7 @@ func ConnectToPgDB(host, user, password, dbname string, port int) (*gorm.DB, *sq
 		return nil, nil, err
 	}
 
-	log.Println("Database connection established!")
+	log.Println("pg database connection established!")
 	return db, sqlDB, nil
 }
 
@@ -50,7 +50,7 @@ func pingMongoDB(ctx context.Context, client *mongo.Client) {
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
 		panic(err)
 	}
-	fmt.Println("db connected successfully")
+	log.Println("mongo database connection established!")
 }
 
 func CloseDBConnection(client *mongo.Client, ctx context.Context,
