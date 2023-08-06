@@ -24,25 +24,24 @@ The user journey in QueryBridge is designed to be seamless and user-friendly. He
 
 ## Features
 
-- **User Authentication**: Secure login and registration system to protect user accounts.
-- **Application Management**: Users can create multiple applications to organize their database connections and endpoints.
-- **Database Connection Setup**: Users can add and manage database connections by providing connection credentials.
-- **Real-time Activity Logging**: Activity logs are continuously updated and displayed in real-time for users to monitor database interactions.
-- **Custom Endpoint Creation**: Users can create custom endpoints by selecting schemas, tables, columns, and CRUD methods.
-- **Dynamic Endpoint URL Generation**: QueryBridge generates dynamic URLs for each custom endpoint, allowing direct CRUD operations on the connected databases.
-- **Private or Public Endpoints**: Users can choose to secure their endpoints with an API key for private access.
+- [x] **User Authentication**
+- [x] **Application Management**
+- [x] **Database Connection Setup**
+- [x] **Real-time Activity Logging**
+- [x] **Simple Custom Endpoint Creation**
+- [ ] **Add Custom Javascript Code to Endpoint Creation**
 
 ## API Documentation
 
-API documentation can be found at [https://documenter.getpostman.com/view/11688875/2s9XxwxaHN]
+API documentation can be found [here](https://documenter.getpostman.com/view/11688875/2s9XxwxaHN)
 
 ## Frontend Repository
 
-The frontend React Tailwind application for the QueryBridge dashboard can be found at [https://github.com/ShowBaba/bridge-dashboard.git]
+The frontend React Tailwind application for the QueryBridge dashboard can be found [here](https://github.com/ShowBaba/bridge-dashboard.git)
 
 ## Figma Design
 
-The design for the QueryBridge dashboard is available on Figma at [https://www.figma.com/file/25wQoBo8shPdxays5XiDSg/query-bridge?type=design&node-id=66%3A9321&mode=design&t=LXIppltNrnTZnHSm-1]
+The design for the QueryBridge dashboard is available on Figma [here](https://www.figma.com/file/25wQoBo8shPdxays5XiDSg/query-bridge?type=design&node-id=66%3A9321&mode=design&t=LXIppltNrnTZnHSm-1)
 
 ## Live URLs
 
