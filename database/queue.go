@@ -19,6 +19,8 @@ var (
 )
 
 func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connection) error {
+	log.Println("setting up database tasks queue")
+
 	pgDbCLient = pg
 	mongoClient = mongo
 	channel, err := connection.Channel()
@@ -26,19 +28,6 @@ func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connectio
 		return err
 	}
 	defer channel.Close()
-
-	err = channel.ExchangeDeclare(
-		utils.DATABASE_QUEUE,
-		amqp091.ExchangeTopic,
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to declare an exchange: %v", err)
-	}
 
 	queue, err := channel.QueueDeclare(
 		utils.DATABASE_QUEUE,
@@ -52,17 +41,7 @@ func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connectio
 		return err
 	}
 
-	err = channel.QueueBind(
-		queue.Name,
-		"",
-		utils.DATABASE_QUEUE,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to bind the queue to the exchange: %v", err)
-	}
-
+	// set up consumer
 	databaseTasks, err := channel.Consume(
 		queue.Name,
 		"",
@@ -80,7 +59,7 @@ func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connectio
 	var (
 		TOTAL_WORKERS = 10
 		requestCh     = make(chan utils.DatabaseTask, TOTAL_WORKERS)
-		errorCh       = make(chan error, 1) // handles error from a worker
+		errorCh       = make(chan error, TOTAL_WORKERS)
 		waitGroup     = &sync.WaitGroup{}
 	)
 
@@ -111,6 +90,13 @@ func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connectio
 		}
 		requestCh <- task
 	}
+
+	go func(errorCh chan error) {
+		for err := range errorCh {
+			log.Printf("Error from worker: %s", err)
+			// TODO: store logs for application
+		}
+	}(errorCh)
 
 	go func() {
 		waitGroup.Wait()

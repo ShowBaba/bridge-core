@@ -12,26 +12,14 @@ import (
 
 var ctx = context.Background()
 
-func InitNotificationQueue(connection *amqp091.Connection) {
+func InitNotificationQueue(connection *amqp091.Connection) error {
+	log.Println("setting up notification tasks queue")
 	channel, err := connection.Channel()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	defer channel.Close()
-
-	err = channel.ExchangeDeclare(
-		utils.NOTIFICATION_QUEUE,
-		amqp091.ExchangeTopic,
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		log.Fatalf("Failed to declare an exchange: %v", err)
-	}
 
 	queue, err := channel.QueueDeclare(
 		utils.NOTIFICATION_QUEUE,
@@ -42,22 +30,11 @@ func InitNotificationQueue(connection *amqp091.Connection) {
 		nil,
 	)
 	if err != nil {
-		panic(err)
-	}
-
-	err = channel.QueueBind(
-		queue.Name,
-		"",
-		utils.NOTIFICATION_QUEUE,
-		false,
-		nil,
-	)
-	if err != nil {
-		log.Fatalf("Failed to bind the queue to the exchange: %v", err)
+		return err
 	}
 
 	emailMsgs, err := channel.Consume(
-		utils.NOTIFICATION_QUEUE,
+		queue.Name,
 		"",
 		true,
 		false,
@@ -67,6 +44,7 @@ func InitNotificationQueue(connection *amqp091.Connection) {
 	)
 	if err != nil {
 		log.Printf("error subscribing to message - %v", err)
+		return err
 	}
 
 	forever := make(chan bool)
@@ -77,14 +55,16 @@ func InitNotificationQueue(connection *amqp091.Connection) {
 				var payload EmailMsgPayload
 				err := json.Unmarshal(emailMsg.Body, &payload)
 				if err != nil {
-					log.Fatal(err)
+					log.Println(err)
+					// TODO: store logs for application
 				}
 				fmt.Println("processing notification ... ")
 				if err := HandleEmailMsg(ctx, payload); err != nil {
-					log.Fatal(err)
+					log.Println(err)
 				}
 			}
 		}
 	}()
 	<-forever
+	return nil
 }

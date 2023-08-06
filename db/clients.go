@@ -54,11 +54,11 @@ func pingMongoDB(ctx context.Context, client *mongo.Client) {
 }
 
 func CloseDBConnection(client *mongo.Client, ctx context.Context,
-	cancel context.CancelFunc) {
+	cancel context.CancelFunc) error {
+	var err error
 	defer cancel()
 	defer func() {
-		if err := client.Disconnect(ctx); err != nil {
-			panic(err)
-		}
+		err = client.Disconnect(ctx)
 	}()
+	return err
 }

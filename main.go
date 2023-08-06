@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
@@ -33,13 +36,17 @@ var (
 )
 
 func main() {
+	var (
+		wg    sync.WaitGroup
+		errCh = make(chan error)
+	)
 	qConn, err := amqp091.Dial(utils.GetConfig().RabbitmqServerURL)
 	if err != nil {
-		panic(err)
+		failOnError(err, "error creating queue connection", errCh)
 	}
 	defer qConn.Close()
 
-	dbCl, conn, err := db.ConnectToPgDB(
+	dbCl, pgConn, err := db.ConnectToPgDB(
 		utils.GetConfig().DbHost,
 		utils.GetConfig().DbUser,
 		utils.GetConfig().DbPassword,
@@ -47,28 +54,28 @@ func main() {
 		utils.GetConfig().DbPort,
 	)
 	if err != nil {
-		panic(err)
+		failOnError(err, "error creating pg database connection", errCh)
 	}
-	defer conn.Close()
+	defer pgConn.Close()
 
 	mongoClient, ctx, cancel, err := db.ConnectToMongoDB(utils.GetConfig().MongoURI)
 	if err != nil {
-		panic(err)
+		failOnError(err, "error creating mongo database connection", errCh)
 	}
 	defer db.CloseDBConnection(mongoClient, ctx, cancel)
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2) // need to wait for all the goroutines to finish starting the queue before proceeding to creating the server
 	go func() {
 		defer wg.Done()
 		if err := database.InitDBQueue(dbCl, mongoClient, qConn); err != nil {
-			panic(err)
+			failOnError(err, "eroor initializing database queue", errCh)
 		}
 	}()
-	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		notification.InitNotificationQueue(qConn)
+		if err := notification.InitNotificationQueue(qConn); err != nil {
+			failOnError(err, "err initilizing notification queue", errCh)
+		}
 	}()
 
 	router := mux.NewRouter()
@@ -89,8 +96,46 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("starting server on port: %s", port)
-	Run(router, fmt.Sprintf(`:%s`, port))
+	if err := Run(router, fmt.Sprintf(`:%s`, port)); err != nil {
+		failOnError(err, "fail to start server", errCh)
+	}
+
 	wg.Wait()
+	close(errCh)
+
+	go func() {
+		for err := range errCh {
+			log.Fatal(err)
+		}
+	}()
+
+	// wait for a termination signal to gracefully shut down the server and the queues
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	select {
+	case <-stop:
+		if err := qConn.Close(); err != nil {
+			log.Printf("Error closing queue connection: %v", err)
+		} else {
+			log.Println("Queue connection closed.")
+		}
+
+		if err := pgConn.Close(); err != nil {
+			log.Printf("Error closing pg connection: %v", err)
+		} else {
+			log.Println("PostgreSQL connection closed.")
+		}
+
+		if err := db.CloseDBConnection(mongoClient, ctx, cancel); err != nil {
+			log.Printf("Error closing MongoDB connection: %v", err)
+		} else {
+			log.Println("MongoDB connection closed.")
+		}
+	default:
+		log.Fatal("some unknown error occurred during shutdown")
+	}
+
+	log.Println("Server and database connections closed. Goodbye!")
 }
 
 func InitializeRoutes(router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Connection,
@@ -124,18 +169,15 @@ func InitializeRoutes(router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Co
 }
 
 // run
-func Run(r *mux.Router, host string) {
-	// CORS
-	log.Fatal(
-		http.ListenAndServe(
-			host,
-			handlers.CORS(
-				handlers.AllowCredentials(),
-				handlers.AllowedMethods([]string{"POST", "GET", "PUT", "OPTIONS", "DELETE", "PATCH"}),
-				handlers.AllowedHeaders([]string{"Authorization", "Content-Type"}),
-				handlers.MaxAge(3600),
-			)(r),
-		),
+func Run(r *mux.Router, host string) error {
+	return http.ListenAndServe(
+		host,
+		handlers.CORS(
+			handlers.AllowCredentials(),
+			handlers.AllowedMethods([]string{"POST", "GET", "PUT", "OPTIONS", "DELETE", "PATCH"}),
+			handlers.AllowedHeaders([]string{"Authorization", "Content-Type"}),
+			handlers.MaxAge(3600),
+		)(r),
 	)
 }
 
@@ -152,4 +194,10 @@ func ping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(responseJSON)
+}
+
+func failOnError(err error, msg string, ch chan<- error) {
+	if err != nil {
+		ch <- fmt.Errorf("%s: %s", msg, err)
+	}
 }
