@@ -36,9 +36,20 @@ func (mail *Mail) BuildMessage() string {
 }
 
 type DatabaseTask struct {
-	DatabaseID uint
-	UserID uint
+	DatabaseID    uint
+	ApplicationID uint
+	UserID        uint
+	Action        DATABASE_TASK_ACTION
 }
+
+type DATABASE_TASK_ACTION string
+
+const (
+	DeleteApplicationResourceAction DATABASE_TASK_ACTION = "delete_application_resource"
+	DeleteDBResourceAction          DATABASE_TASK_ACTION = "delete_db_resource"
+	UpdateAction                    DATABASE_TASK_ACTION = "update_database"
+	FetchDBAction                   DATABASE_TASK_ACTION = "fetch_database"
+)
 
 type DatabaseConnectionPayload struct {
 	Name     string `json:"name" validate:"required"`
@@ -51,7 +62,7 @@ type DatabaseConnectionPayload struct {
 }
 
 type SchemaData struct {
-	Schema  string
+	Schema string
 	Tables []TableData
 }
 

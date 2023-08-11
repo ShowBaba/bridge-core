@@ -152,6 +152,7 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	databaseTask := utils.DatabaseTask{
 		DatabaseID: uint(databaseID),
 		UserID:     userId,
+		Action:     utils.FetchDBAction,
 	}
 	payload, err := json.Marshal(databaseTask)
 	if err != nil {
@@ -225,70 +226,22 @@ func DeleteDatabases(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// delete other associating resources
-	go func() {
-		database, _, err := database.FetchDatabase(db, models.Database{ApplicationID: application.ID})
+	databaseTask := utils.DatabaseTask{
+		DatabaseID: database.ID,
+		UserID:     userId,
+		Action:     utils.DeleteDBResourceAction,
+	}
+	payload, err := json.Marshal(databaseTask)
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.DATABASE_QUEUE); err != nil {
 		if err != nil {
 			utils.Dispatch500Error(w, err.Error())
 			return
 		}
-
-		var (
-			schemaIDs []uint
-			tableIDs  []uint
-			columnIDs []uint
-		)
-
-		var schema models.Schema
-		schemas, err := schema.FetchSchemas(db, models.Schema{DatabaseID: database.ID})
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-
-		for _, schema := range schemas {
-			schemaIDs = append(schemaIDs, schema.ID)
-
-			var table models.Table
-			tables, err := table.FetchTables(db, models.Table{SchemaID: schema.ID})
-			if err != nil {
-				utils.Dispatch500Error(w, err.Error())
-				return
-			}
-
-			for _, table := range tables {
-				tableIDs = append(tableIDs, table.ID)
-
-				var column models.Column
-				columns, err := column.FetchColumns(db, models.Column{TableID: table.ID})
-				if err != nil {
-					utils.Dispatch500Error(w, err.Error())
-					return
-				}
-
-				for _, column := range columns {
-					columnIDs = append(columnIDs, column.ID)
-				}
-			}
-		}
-
-		var column *models.Column
-		if err := column.DeleteMany(db, columnIDs); err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-
-		var table *models.Table
-		if err := table.DeleteMany(db, tableIDs); err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-
-		if err := schema.DeleteMany(db, schemaIDs); err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-
-	}()
+	}
 
 	if err := database.Delete(db, &models.Database{ID: database.ID}); err != nil {
 		utils.Dispatch500Error(w, err.Error())

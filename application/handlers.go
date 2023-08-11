@@ -198,102 +198,29 @@ func DeleteApplication(w http.ResponseWriter, r *http.Request) {
 		utils.Dispatch404Error(w, "cannot find application")
 		return
 	}
-	if err = application.Delete(db, &models.Application{ID: application.ID}); err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
 
-	var endpoint models.Endpoint
-	var endpointIDs []uint
-	endpoints, err := endpoint.FetchEndpoints(db, models.Endpoint{ApplicationID: application.ID})
+	// delete other associating resources
+	databaseTask := utils.DatabaseTask{
+		UserID:        userId,
+		ApplicationID: application.ID,
+		Action:        utils.DeleteApplicationResourceAction,
+	}
+	payload, err := json.Marshal(databaseTask)
 	if err != nil {
 		utils.Dispatch500Error(w, err.Error())
 		return
 	}
-	for _, endpoint := range endpoints {
-		endpointIDs = append(endpointIDs, endpoint.ID)
-	}
-	if err := endpoint.DeleteMany(db, endpointIDs); err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-
-	// delete other associating resources
-	go func() {
-		var database models.Database
-		databases, err := database.FetchDatabases(db, models.Database{ApplicationID: application.ID})
+	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.DATABASE_QUEUE); err != nil {
 		if err != nil {
 			utils.Dispatch500Error(w, err.Error())
 			return
 		}
+	}
 
-		var (
-			databaseIDs []uint
-			schemaIDs   []uint
-			tableIDs    []uint
-			columnIDs   []uint
-		)
-
-		for _, database := range databases {
-			databaseIDs = append(databaseIDs, database.ID)
-
-			var schema models.Schema
-			schemas, err := schema.FetchSchemas(db, models.Schema{DatabaseID: database.ID})
-			if err != nil {
-				utils.Dispatch500Error(w, err.Error())
-				return
-			}
-
-			for _, schema := range schemas {
-				schemaIDs = append(schemaIDs, schema.ID)
-
-				var table models.Table
-				tables, err := table.FetchTables(db, models.Table{SchemaID: schema.ID})
-				if err != nil {
-					utils.Dispatch500Error(w, err.Error())
-					return
-				}
-
-				for _, table := range tables {
-					tableIDs = append(tableIDs, table.ID)
-
-					var column models.Column
-					columns, err := column.FetchColumns(db, models.Column{TableID: table.ID})
-					if err != nil {
-						utils.Dispatch500Error(w, err.Error())
-						return
-					}
-
-					for _, column := range columns {
-						columnIDs = append(columnIDs, column.ID)
-					}
-				}
-			}
-		}
-
-		var column *models.Column
-		if err := column.DeleteMany(db, columnIDs); err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-
-		var table *models.Table
-		if err := table.DeleteMany(db, tableIDs); err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-
-		var schema *models.Schema
-		if err := schema.DeleteMany(db, schemaIDs); err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-
-		if err := database.DeleteMany(db, databaseIDs); err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-	}()
+	if err = application.Delete(db, &models.Application{ID: application.ID}); err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
 
 	response := utils.APIResponse{
 		Status:  http.StatusOK,
@@ -409,6 +336,7 @@ func AddDatabases(w http.ResponseWriter, r *http.Request) {
 	databaseTask := utils.DatabaseTask{
 		DatabaseID: id,
 		UserID:     userId,
+		Action:     utils.FetchDBAction,
 	}
 	payload, err := json.Marshal(databaseTask)
 	if err != nil {
