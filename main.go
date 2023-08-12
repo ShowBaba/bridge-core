@@ -64,7 +64,7 @@ func main() {
 	}
 	defer db.CloseDBConnection(mongoClient, ctx, cancel)
 
-	wg.Add(2) // need to wait for all the goroutines to finish starting the queue before proceeding to creating the server
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		if err := database.InitDBQueue(dbCl, mongoClient, qConn); err != nil {
@@ -141,9 +141,9 @@ func main() {
 func InitializeRoutes(router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Connection,
 	mongoClient *mongo.Client) {
 	// graphql route
-	router.HandleFunc("/gql", utils.ValidateAuthHeaderToken(func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/gql", func(w http.ResponseWriter, r *http.Request) {
 		gql.RunGQL(w, r, schema, ctx)
-	})).Methods("POST", "OPTIONS")
+	}).Methods("POST", "OPTIONS")
 
 	// log stream route
 	router.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {

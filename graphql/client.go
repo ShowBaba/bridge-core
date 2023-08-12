@@ -6,29 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/graphql-go/graphql"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
 func RunGQL(w http.ResponseWriter, r *http.Request, schema graphql.Schema, ctx context.Context) {
-	if r.Method == "OPTIONS" {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		w.Header().Add("Access-Control-Allow-Headers", "Authorization")
-		w.Header().Set("Access-Control-Max-Age", "3600")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
-	userId, ok := r.Context().Value("id").(uint)
-	if !ok {
-		utils.Dispatch401Error(w, "Unauthorized access; id missing")
-		return
-	}
-
 	// Read the query
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -41,9 +25,26 @@ func RunGQL(w http.ResponseWriter, r *http.Request, schema graphql.Schema, ctx c
 		resp    *graphql.Result
 	)
 
-	ctx = context.WithValue(ctx, utils.KeyID, userId)
-
 	if err := json.Unmarshal(body, &payload); err == nil {
+		if !strings.Contains(payload.Query, "__schema") {
+			// not an introspection query, so add auth validator
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" {
+				utils.Dispatch400Error(w, "auth token not in header")
+				return
+			}
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				utils.Dispatch400Error(w, "bearer token not in header")
+				return
+			}
+			claim, err := utils.ValidateAuthToken(parts[1], utils.GetConfig().JWTSecretKey)
+			if err != nil {
+				utils.Dispatch400Error(w, fmt.Sprintf("error validating auth token token: %v", err))
+				return
+			}
+			ctx = context.WithValue(r.Context(), utils.KeyID, claim.ID)
+		}
 		resp = graphql.Do(graphql.Params{
 			Schema:         schema,
 			RequestString:  payload.Query,
