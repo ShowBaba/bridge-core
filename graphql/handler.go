@@ -92,6 +92,9 @@ func Init(db *gorm.DB) *graphql.Object {
 					if res.RowsAffected > 0 {
 						list.Nodes = []interface{}{}
 						for _, u := range databases {
+							// decrypt db passwords
+							dec, _ := utils.Decrypt(u.Password, []byte(utils.GetConfig().EncryptionKey))
+							u.Password = string(dec)
 							list.Nodes = append(list.Nodes, interface{}(u))
 						}
 						list.TotalCount = len(list.Nodes)
