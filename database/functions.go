@@ -3,7 +3,6 @@ package database
 import (
 	"database/sql"
 	"fmt"
-
 	"github.com/showbaba/query-bridge/bridge-core/models"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 	"go.mongodb.org/mongo-driver/mongo"

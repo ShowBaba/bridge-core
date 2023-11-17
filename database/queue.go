@@ -80,14 +80,14 @@ func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connectio
 	}
 
 	var (
-		TOTAL_WORKERS = 10
-		requestCh     = make(chan utils.DatabaseTask, 20)
-		errorCh       = make(chan error, TOTAL_WORKERS)
-		waitGroup     = &sync.WaitGroup{}
+		TotalWorkers = 10
+		requestCh    = make(chan utils.DatabaseTask, 20)
+		errorCh      = make(chan error, TotalWorkers)
+		waitGroup    = &sync.WaitGroup{}
 	)
 
 	// Start worker pool
-	for i := 0; i < TOTAL_WORKERS; i++ {
+	for i := 0; i < TotalWorkers; i++ {
 		worker := &Worker{
 			id:        i,
 			waitGroup: waitGroup,
@@ -137,14 +137,13 @@ type Worker struct {
 }
 
 func (w Worker) run() {
-	log.Printf("worker [%v] running", w.id)
 	w.waitGroup.Add(1)
 
 	for task := range w.requestCh {
 		log.Printf("Worker [%d] processing task with db id: (%v)", w.id, task.DatabaseID)
 		switch task.Action {
 		case utils.FetchDBAction:
-			err := handleFecthDbTask(task, pgDbCLient, mongoClient)
+			err := handleFetchDbTask(task, pgDbCLient, mongoClient)
 			if err != nil {
 				// TODO: send notification to user, add endpoint to re-fetch db data
 				log.Printf("error processing [%s] task: %v, from worker: %v", utils.FetchDBAction, err, w.id)
@@ -168,7 +167,7 @@ func (w Worker) run() {
 	w.waitGroup.Done()
 }
 
-func handleFecthDbTask(task utils.DatabaseTask, pgDb *gorm.DB, mongoClient *mongo.Client) error {
+func handleFetchDbTask(task utils.DatabaseTask, pgDb *gorm.DB, mongoClient *mongo.Client) error {
 	var database *models.Database
 	database, _, err := database.FetchDatabase(pgDb, models.Database{ID: task.DatabaseID})
 	if err != nil {

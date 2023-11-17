@@ -4,14 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
-	"time"
-
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"log"
 )
 
 func ConnectToPgDB(host, user, password, dbname string, port int) (*gorm.DB, *sql.DB, error) {
@@ -35,15 +33,13 @@ func ConnectToPgDB(host, user, password, dbname string, port int) (*gorm.DB, *sq
 	return db, sqlDB, nil
 }
 
-func ConnectToMongoDB(uri string) (*mongo.Client, context.Context, context.CancelFunc, error) {
-	ctx, cancel := context.WithTimeout(context.Background(),
-		30*time.Second)
+func ConnectToMongoDB(ctx context.Context, uri string) (*mongo.Client, error) {
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
-		return nil, ctx, cancel, err
+		return nil, err
 	}
 	pingMongoDB(ctx, client)
-	return client, ctx, cancel, err
+	return client, err
 }
 
 func pingMongoDB(ctx context.Context, client *mongo.Client) {
@@ -53,12 +49,6 @@ func pingMongoDB(ctx context.Context, client *mongo.Client) {
 	log.Println("mongo database connection established!")
 }
 
-func CloseDBConnection(client *mongo.Client, ctx context.Context,
-	cancel context.CancelFunc) error {
-	var err error
-	defer cancel()
-	defer func() {
-		err = client.Disconnect(ctx)
-	}()
-	return err
+func CloseDBConnection(client *mongo.Client, ctx context.Context) error {
+	return client.Disconnect(ctx)
 }

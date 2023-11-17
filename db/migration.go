@@ -5,15 +5,15 @@ import (
 	"gorm.io/gorm"
 )
 
-func Migrate(db *gorm.DB) {
-	db.AutoMigrate(
-		// &models.Application{},
-		// &models.User{},
-		// &models.Database{},
-		// &models.Schema{},
-		// &models.Table{},
-		// &models.Column{},
-		// &models.Endpoint{},
+func Migrate(db *gorm.DB) error {
+	err := db.AutoMigrate(
+	// &models.Application{},
+	// &models.User{},
+	// &models.Database{},
+	// &models.Schema{},
+	// &models.Table{},
+	// &models.Column{},
+	// &models.Endpoint{},
 	)
 
 	db.Model(&models.Application{}).Association("UserID")
@@ -22,4 +22,9 @@ func Migrate(db *gorm.DB) {
 	db.Model(&models.Table{}).Association("SchemaID")
 	db.Model(&models.Column{}).Association("TableID")
 	db.Model(&models.Endpoint{}).Association("TableID")
+
+	if err != nil {
+		return err
+	}
+	return nil
 }

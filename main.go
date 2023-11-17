@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/gorilla/handlers"
@@ -30,90 +31,82 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	schema graphql.Schema
-	ctx    = context.Background()
-)
-
 func main() {
 	var (
-		wg    sync.WaitGroup
-		errCh = make(chan error)
+		g, ctx      = errgroup.WithContext(context.TODO())
+		qConn       *amqp091.Connection
+		dbClient    *gorm.DB
+		pgConn      *sql.DB
+		mongoClient *mongo.Client
+		err         error
 	)
-	qConn, err := amqp091.Dial(utils.GetConfig().RabbitmqServerURL)
-	if err != nil {
-		failOnError(err, "error creating queue connection", errCh)
-	}
-	defer qConn.Close()
 
-	dbCl, pgConn, err := db.ConnectToPgDB(
-		utils.GetConfig().DbHost,
-		utils.GetConfig().DbUser,
-		utils.GetConfig().DbPassword,
-		utils.GetConfig().DbName,
-		utils.GetConfig().DbPort,
+	qConn, err = amqp091.Dial(utils.GetConfig().RabbitmqServerURL)
+	if err != nil {
+		log.Fatal(fmt.Errorf(`error opening queue connection; %v`, err))
+	}
+
+	dbClient, pgConn, err = db.ConnectToPgDB(
+		utils.GetConfig().DbHost, utils.GetConfig().DbUser, utils.GetConfig().DbPassword, utils.GetConfig().DbName, utils.GetConfig().DbPort,
 	)
 	if err != nil {
-		failOnError(err, "error creating pg database connection", errCh)
+		log.Fatal(fmt.Errorf(`error creating pg database connection; %v`, err))
 	}
-	defer pgConn.Close()
 
-	mongoClient, ctx, cancel, err := db.ConnectToMongoDB(utils.GetConfig().MongoURI)
+	mongoClient, err = db.ConnectToMongoDB(ctx, utils.GetConfig().MongoURI)
 	if err != nil {
-		failOnError(err, "error creating mongo database connection", errCh)
+		log.Fatal(fmt.Errorf(`error creating mongo database connection; %v`, err))
 	}
-	defer db.CloseDBConnection(mongoClient, ctx, cancel)
 
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		if err := database.InitDBQueue(dbCl, mongoClient, qConn); err != nil {
-			failOnError(err, "eroor initializing database queue", errCh)
+	g.Go(func() error {
+		if err := database.InitDBQueue(dbClient, mongoClient, qConn); err != nil {
+			return fmt.Errorf(`error initializing database queue; %v`, err)
 		}
-	}()
-	go func() {
-		defer wg.Done()
+		return nil
+	})
+
+	g.Go(func() error {
 		if err := notification.InitNotificationQueue(qConn); err != nil {
-			failOnError(err, "err initilizing notification queue", errCh)
+			return fmt.Errorf(`err initilizing notification queue; %v`, err)
 		}
-	}()
+		return nil
+	})
 
-	router := mux.NewRouter()
-	db.Migrate(dbCl)
-	InitializeRoutes(router, dbCl, qConn, mongoClient)
-	// initialize graghql schema
-	schema, err = graphql.NewSchema(
-		graphql.SchemaConfig{
-			Query: gql.Init(dbCl),
-		},
-	)
-	if err != nil {
-		fmt.Println("error creating schema: ", err)
-		return
-	}
-	port := utils.GetConfig().Port
-	if port == "" {
-		port = "8080"
-	}
-	log.Printf("starting server on port: %s", port)
-	if err := Run(router, fmt.Sprintf(`:%s`, port)); err != nil {
-		failOnError(err, "fail to start server", errCh)
-	}
-
-	wg.Wait()
-	close(errCh)
-
-	go func() {
-		for err := range errCh {
-			log.Fatal(err)
+	g.Go(func() error {
+		schema, err := graphql.NewSchema(
+			graphql.SchemaConfig{
+				Query: gql.Init(dbClient),
+			},
+		)
+		if err != nil {
+			return fmt.Errorf(`error creating schema; %v`, err)
 		}
-	}()
+		router := mux.NewRouter()
+		InitializeRoutes(ctx, router, dbClient, qConn, mongoClient, schema)
+		port := utils.GetConfig().Port
+		if port == "" {
+			port = "8080"
+		}
+		log.Printf("starting server on port: %s", port)
+		if err := Run(router, fmt.Sprintf(`:%s`, port)); err != nil {
+			return fmt.Errorf(`fail to start server; %v`, err)
+		}
+		return nil
+	})
 
-	// wait for a termination signal to gracefully shut down the server and the queues
+	g.Go(func() error {
+		return db.Migrate(dbClient)
+	})
+
+	if err := g.Wait(); err != nil {
+		log.Fatal(err)
+	}
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	select {
 	case <-stop:
+	case <-ctx.Done():
 		if err := qConn.Close(); err != nil {
 			log.Printf("Error closing queue connection: %v", err)
 		} else {
@@ -123,10 +116,10 @@ func main() {
 		if err := pgConn.Close(); err != nil {
 			log.Printf("Error closing pg connection: %v", err)
 		} else {
-			log.Println("PostgreSQL connection closed.")
+			log.Println("PostgresSQL connection closed.")
 		}
 
-		if err := db.CloseDBConnection(mongoClient, ctx, cancel); err != nil {
+		if err := db.CloseDBConnection(mongoClient, ctx); err != nil {
 			log.Printf("Error closing MongoDB connection: %v", err)
 		} else {
 			log.Println("MongoDB connection closed.")
@@ -138,11 +131,11 @@ func main() {
 	log.Println("Server and database connections closed. Goodbye!")
 }
 
-func InitializeRoutes(router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Connection,
-	mongoClient *mongo.Client) {
+func InitializeRoutes(ctx context.Context, router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Connection,
+	mongoClient *mongo.Client, gqlSchema graphql.Schema) {
 	// graphql route
 	router.HandleFunc("/gql", func(w http.ResponseWriter, r *http.Request) {
-		gql.RunGQL(w, r, schema, ctx)
+		gql.RunGQL(w, r, gqlSchema, ctx)
 	}).Methods("POST", "OPTIONS")
 
 	// log stream route
@@ -168,7 +161,6 @@ func InitializeRoutes(router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Co
 	endpoint.InitializeEndpointRoutes(endpointRoutes, dbCl, mongoClient)
 }
 
-// run
 func Run(r *mux.Router, host string) error {
 	return http.ListenAndServe(
 		host,
@@ -194,10 +186,4 @@ func ping(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(responseJSON)
-}
-
-func failOnError(err error, msg string, ch chan<- error) {
-	if err != nil {
-		ch <- fmt.Errorf("%s: %s", msg, err)
-	}
 }
