@@ -46,7 +46,7 @@ The design for the QueryBridge dashboard is available on Figma [here](https://ww
 ## Live URLs
 
 - Backend Server: [https://bridge-core.onrender.com]
-- Frontend Dashboard: [https://bridge-dashboard.onrender.com]
+- Frontend Dashboard: [https://bridge-dashboard.vercel.app/login]
 
 ## Contributing
 
