@@ -2,8 +2,6 @@ package application
 
 import (
 	"context"
-	"net/http"
-
 	"github.com/gorilla/mux"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
@@ -19,8 +17,8 @@ var (
 func InitializeApplicationRoutes(router *mux.Router, dbClient *gorm.DB, qC *amqp091.Connection) {
 	db = dbClient
 	queueConnection = qC
-	router.HandleFunc("/create", utils.ValidateAuthHeaderToken(http.HandlerFunc(CreateApplication))).Methods("POST")
-	router.HandleFunc("/{application_id}/update", utils.ValidateAuthHeaderToken(http.HandlerFunc(UpdateApplication))).Methods("PATCH")
-	router.HandleFunc("/{application_id}/delete", utils.ValidateAuthHeaderToken(http.HandlerFunc(DeleteApplication))).Methods("DELETE")
-	router.HandleFunc("/{application_id}/add-database", utils.ValidateAuthHeaderToken(http.HandlerFunc(AddDatabases))).Methods("POST")
+	router.HandleFunc("/create", utils.ValidateAuthHeaderToken(CreateApplication)).Methods("POST")
+	router.HandleFunc("/{application_id}/update", utils.ValidateAuthHeaderToken(UpdateApplication)).Methods("PATCH")
+	router.HandleFunc("/{application_id}/delete", utils.ValidateAuthHeaderToken(DeleteApplication)).Methods("DELETE")
+	router.HandleFunc("/{application_id}/add-database", utils.ValidateAuthHeaderToken(AddDatabases)).Methods("POST")
 }

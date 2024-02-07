@@ -83,7 +83,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.NOTIFICATION_QUEUE); err != nil {
 		if err != nil {
-			utils.Dispatch500Error(w,  err.Error())
+			utils.Dispatch500Error(w, err.Error())
 			return
 		}
 	}
@@ -91,6 +91,40 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		Status:  http.StatusOK,
 		Message: "user registered successfully",
 		Data:    nil,
+	}
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	w.Write(responseJSON)
+}
+
+func GetUserProfileHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	userId := r.Context().Value("id").(uint)
+
+	var user *models.User
+	user, err := user.GetUser(db, models.User{ID: userId})
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		utils.Dispatch500Error(w, err.Error())
+		return
+	}
+	if user == nil {
+		utils.Dispatch400Error(w, "user does not")
+		return
+	}
+	response := utils.APIResponse{
+		Status:  http.StatusOK,
+		Message: "fetch user profile successfully",
+		Data: map[string]interface{}{
+			"email":     user.Email,
+			"firstname": user.FirstName,
+			"lastname":  user.LastName,
+			"id":        user.ID,
+		},
 	}
 	responseJSON, err := json.Marshal(response)
 	if err != nil {

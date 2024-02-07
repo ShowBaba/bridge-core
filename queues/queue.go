@@ -1,6 +1,7 @@
-package database
+package queues
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 var (
 	pgDbCLient  *gorm.DB
 	mongoClient *mongo.Client
+	ctx         = context.Background()
 )
 
 func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connection) error {
@@ -205,7 +207,7 @@ func handleFetchDbTask(task utils.DatabaseTask, pgDb *gorm.DB, mongoClient *mong
 
 	go func() {
 		defer wg.Done()
-		LogSqlQuery(mongoClient, database.ApplicationID, task.UserID, sqlLogCh, errorCh)
+		LogSqlQuery(ctx, mongoClient, database.ApplicationID, task.UserID, sqlLogCh, errorCh)
 	}()
 
 	go func() {
@@ -226,19 +228,19 @@ func handleFetchDbTask(task utils.DatabaseTask, pgDb *gorm.DB, mongoClient *mong
 func handleDeleteApplicationResourceTask(task utils.DatabaseTask, pgDb *gorm.DB, monogoClient *mongo.Client) error {
 	var endpoint models.Endpoint
 	var endpointIDs []uint
-	endpoints, err := endpoint.FetchEndpoints(db, models.Endpoint{ApplicationID: task.ApplicationID})
+	endpoints, err := endpoint.FetchEndpoints(pgDb, models.Endpoint{ApplicationID: task.ApplicationID})
 	if err != nil {
 		return err
 	}
 	for _, endpoint := range endpoints {
 		endpointIDs = append(endpointIDs, endpoint.ID)
 	}
-	if err := endpoint.DeleteMany(db, endpointIDs); err != nil {
+	if err := endpoint.DeleteMany(pgDb, endpointIDs); err != nil {
 		return err
 	}
 
 	var database models.Database
-	databases, err := database.FetchDatabases(db, models.Database{ApplicationID: task.ApplicationID})
+	databases, err := database.FetchDatabases(pgDb, models.Database{ApplicationID: task.ApplicationID})
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -254,7 +256,7 @@ func handleDeleteApplicationResourceTask(task utils.DatabaseTask, pgDb *gorm.DB,
 		databaseIDs = append(databaseIDs, database.ID)
 
 		var schema models.Schema
-		schemas, err := schema.FetchSchemas(db, models.Schema{DatabaseID: database.ID})
+		schemas, err := schema.FetchSchemas(pgDb, models.Schema{DatabaseID: database.ID})
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
@@ -263,7 +265,7 @@ func handleDeleteApplicationResourceTask(task utils.DatabaseTask, pgDb *gorm.DB,
 			schemaIDs = append(schemaIDs, schema.ID)
 
 			var table models.Table
-			tables, err := table.FetchTables(db, models.Table{SchemaID: schema.ID})
+			tables, err := table.FetchTables(pgDb, models.Table{SchemaID: schema.ID})
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
@@ -272,7 +274,7 @@ func handleDeleteApplicationResourceTask(task utils.DatabaseTask, pgDb *gorm.DB,
 				tableIDs = append(tableIDs, table.ID)
 
 				var column models.Column
-				columns, err := column.FetchColumns(db, models.Column{TableID: table.ID})
+				columns, err := column.FetchColumns(pgDb, models.Column{TableID: table.ID})
 				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 					return err
 				}
@@ -285,21 +287,21 @@ func handleDeleteApplicationResourceTask(task utils.DatabaseTask, pgDb *gorm.DB,
 	}
 
 	var column *models.Column
-	if err := column.DeleteMany(db, columnIDs); err != nil {
+	if err := column.DeleteMany(pgDb, columnIDs); err != nil {
 		return err
 	}
 
 	var table *models.Table
-	if err := table.DeleteMany(db, tableIDs); err != nil {
+	if err := table.DeleteMany(pgDb, tableIDs); err != nil {
 		return err
 	}
 
 	var schema *models.Schema
-	if err := schema.DeleteMany(db, schemaIDs); err != nil {
+	if err := schema.DeleteMany(pgDb, schemaIDs); err != nil {
 		return err
 	}
 
-	if err := database.DeleteMany(db, databaseIDs); err != nil {
+	if err := database.DeleteMany(pgDb, databaseIDs); err != nil {
 		return err
 	}
 	return nil
@@ -313,7 +315,7 @@ func handleDeleteDBResourceTask(task utils.DatabaseTask, pgDb *gorm.DB, monogoCl
 	)
 
 	var schema models.Schema
-	schemas, err := schema.FetchSchemas(db, models.Schema{DatabaseID: task.DatabaseID})
+	schemas, err := schema.FetchSchemas(pgDb, models.Schema{DatabaseID: task.DatabaseID})
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -322,7 +324,7 @@ func handleDeleteDBResourceTask(task utils.DatabaseTask, pgDb *gorm.DB, monogoCl
 		schemaIDs = append(schemaIDs, schema.ID)
 
 		var table models.Table
-		tables, err := table.FetchTables(db, models.Table{SchemaID: schema.ID})
+		tables, err := table.FetchTables(pgDb, models.Table{SchemaID: schema.ID})
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
@@ -331,7 +333,7 @@ func handleDeleteDBResourceTask(task utils.DatabaseTask, pgDb *gorm.DB, monogoCl
 			tableIDs = append(tableIDs, table.ID)
 
 			var column models.Column
-			columns, err := column.FetchColumns(db, models.Column{TableID: table.ID})
+			columns, err := column.FetchColumns(pgDb, models.Column{TableID: table.ID})
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
@@ -343,16 +345,16 @@ func handleDeleteDBResourceTask(task utils.DatabaseTask, pgDb *gorm.DB, monogoCl
 	}
 
 	var column *models.Column
-	if err := column.DeleteMany(db, columnIDs); err != nil {
+	if err := column.DeleteMany(pgDb, columnIDs); err != nil {
 		return err
 	}
 
 	var table *models.Table
-	if err := table.DeleteMany(db, tableIDs); err != nil {
+	if err := table.DeleteMany(pgDb, tableIDs); err != nil {
 		return err
 	}
 
-	if err := schema.DeleteMany(db, schemaIDs); err != nil {
+	if err := schema.DeleteMany(pgDb, schemaIDs); err != nil {
 		return err
 	}
 

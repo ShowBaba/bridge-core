@@ -62,7 +62,7 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var application *models.Application
-	_, exist, err = application.FetchApplication(db, models.Application{ID: database.ApplicationID})
+	application, exist, err = application.FetchApplication(db, models.Application{ID: database.ApplicationID})
 	if err != nil {
 		utils.Dispatch500Error(w, err.Error())
 		return
@@ -71,6 +71,7 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		utils.Dispatch404Error(w, "cannot find application")
 		return
 	}
+
 	if application.UserID != userId {
 		utils.Dispatch401Error(w, "unauthorized")
 		return
@@ -148,21 +149,28 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//TODO: only need to re-fetch database data if only credentials changed
-	databaseTask := utils.DatabaseTask{
-		DatabaseID: uint(databaseID),
-		UserID:     userId,
-		Action:     utils.FetchDBAction,
-	}
-	payload, err := json.Marshal(databaseTask)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.DATABASE_QUEUE); err != nil {
+	// TODO: only need to re-fetch database data if only credentials changed
+	if input.Host != database.Host &&
+		input.Port != database.Port &&
+		input.Database != database.Database &&
+		input.Username != database.Username &&
+		encryptedPassword != database.Password &&
+		input.DbEngine != database.DbEngine {
+		databaseTask := utils.DatabaseTask{
+			DatabaseID: uint(databaseID),
+			UserID:     userId,
+			Action:     utils.FetchDBAction,
+		}
+		payload, err := json.Marshal(databaseTask)
 		if err != nil {
 			utils.Dispatch500Error(w, err.Error())
 			return
+		}
+		if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.DATABASE_QUEUE); err != nil {
+			if err != nil {
+				utils.Dispatch500Error(w, err.Error())
+				return
+			}
 		}
 	}
 	response := utils.APIResponse{

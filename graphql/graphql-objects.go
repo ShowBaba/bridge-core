@@ -70,7 +70,7 @@ var EndpointType = graphql.NewObject(
 			"ID":             &graphql.Field{Type: graphql.Int},
 			"Name":           &graphql.Field{Type: graphql.String},
 			"ApplicationID":  &graphql.Field{Type: graphql.Int},
-			"DatabaseID": &graphql.Field{Type: graphql.Int},
+			"DatabaseID":     &graphql.Field{Type: graphql.Int},
 			"TableID":        &graphql.Field{Type: graphql.Int},
 			"Limit":          &graphql.Field{Type: graphql.Int},
 			"OrderBy":        &graphql.Field{Type: graphql.String},

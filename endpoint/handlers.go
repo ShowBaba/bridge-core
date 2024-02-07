@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -168,7 +169,7 @@ func CreateEndpointHandler(w http.ResponseWriter, r *http.Request) {
 		OrderBy:        input.OrderBy,
 		OrderDirection: input.OrderDirection,
 		Columns:        input.Columns,
-		DatabaseID:    uint(database_id_num),
+		DatabaseID:     uint(database_id_num),
 	}
 	err = endpoint.Insert(db)
 	if err != nil {
@@ -206,7 +207,8 @@ func ExecuteEndpointHandler(w http.ResponseWriter, r *http.Request) {
 	validate := validator.New()
 	err := validate.Struct(input)
 	if err != nil {
-		validationErrors := err.(validator.ValidationErrors)
+		var validationErrors validator.ValidationErrors
+		errors.As(err, &validationErrors)
 		utils.Dispatch400Error(w, validationErrors.Error())
 		return
 	}

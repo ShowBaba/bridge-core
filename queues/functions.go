@@ -1,6 +1,7 @@
-package database
+package queues
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"github.com/showbaba/query-bridge/bridge-core/models"
@@ -77,7 +78,9 @@ func FetchTables(db *sql.DB, schema string, sqlLogCh chan<- string) ([]string, e
 		if err != nil {
 			return nil, err
 		}
-		tables = append(tables, table)
+		if !isDefaultTable(table) {
+			tables = append(tables, table)
+		}
 	}
 
 	return tables, nil
@@ -107,7 +110,7 @@ func FetchColumns(db *sql.DB, schema, tableName string, sqlLogCh chan<- string) 
 	return columns, nil
 }
 
-func LogSqlQuery(mongoClient *mongo.Client, applicationID uint, userID uint, ch <-chan string, errCh chan<- error) {
+func LogSqlQuery(ctx context.Context, mongoClient *mongo.Client, applicationID uint, userID uint, ch <-chan string, errCh chan<- error) {
 	for logData := range ch {
 		var stream *models.StreamLog
 		err := stream.Insert(ctx, mongoClient, logData, applicationID, userID)
@@ -196,4 +199,32 @@ func StoreData(db *gorm.DB, dbID, userID uint, ch <-chan utils.SchemaData, errCh
 			}
 		}
 	}
+}
+
+var defaultTables = []string{"Overview", "pg_aggregate", "pg_am", "pg_amop", "pg_amproc", "pg_attrdef", "pg_attribute", "pg_authid",
+	"pg_auth_members", "pg_cast", "pg_class",
+	"pg_collation", "pg_constraint", "pg_conversion", "pg_database", "pg_db_role_setting", "pg_default_acl", "pg_depend",
+	"pg_description", "pg_enum", "pg_event_trigger", "pg_extension", "pg_foreign_server", "pg_foreign_data_wrapper", "pg_foreign_table", "pg_index", "pg_inherits",
+	"pg_init_privs", "pg_language", "pg_largeobject", "pg_largeobject_metadata", "pg_namespace", "pg_opclass", "pg_operator",
+	"pg_opfamily", "pg_parameter_acl", "pg_partitioned_table", "pg_policy", "pg_proc", "pg_publication", "pg_publication_namespace",
+	"pg_publication_rel", "pg_range", "pg_replication_origin", "pg_rewrite", "pg_seclabel", "pg_sequence", "pg_shdepend", "pg_shdescription",
+	"pg_shseclabel", "pg_statistic", "pg_statistic_ext", "pg_statistic_ext_data", "pg_subscription", "pg_subscription_rel", "pg_tablespace", "pg_transform",
+	"pg_trigger", "pg_ts_config", "pg_ts_config_map", "pg_ts_dict", "pg_ts_parser", "pg_ts_template", "pg_type", "pg_user_mapping",
+	"pg_stat_activity", "pg_stat_database",
+	"pg_stat_user_tables", "pg_stat_user_indexes", "pg_stat_user_functions", "pg_stat_replication", "pg_stat_bgwriter", "pg_stat_ssl", "pg_stat_progress_vacuum",
+	"pg_stat_wal_receiver", "pg_stat_subscription", "pg_stat_all_tables", "pg_stat_sys_tables", "pg_stat_sys_indexes", "pg_stat_sys_functions", "pg_stat_xact_all_tables",
+	"pg_stat_xact_sys_tables", "pg_stat_xact_user_tables", "pg_stat_all_indexes", "pg_stat_xact_all_indexes", "pg_stat_database_conflicts",
+	"pg_settings", "pg_locks", "pg_prepared_xacts",
+	"pg_prepared_statements", "pg_cursors", "pg_tables", "pg_views", "pg_indexes", "pg_user_mappings", "pg_user", "pg_group", "pg_roles", "pg_shadow", "pg_auth_members",
+	"pg_description", "pg_shdescription", "pg_db_role_setting", "pg_init_privs", "pg_seclabels", "pg_shseclabels", "pg_timezone_abbrevs", "pg_timezone_names", "pg_statistic",
+	"pg_subscription_rel", "pg_replication_slots", "pg_publication", "pg_publication_rel", "pg_stat_statements",
+}
+
+func isDefaultTable(tableName string) bool {
+	for _, table := range defaultTables {
+		if tableName == table {
+			return true
+		}
+	}
+	return false
 }

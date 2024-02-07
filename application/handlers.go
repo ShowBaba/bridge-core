@@ -2,6 +2,7 @@ package application
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -88,7 +89,8 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	validate := validator.New()
 	err := validate.Struct(input)
 	if err != nil {
-		validationErrors := err.(validator.ValidationErrors)
+		var validationErrors validator.ValidationErrors
+		errors.As(err, &validationErrors)
 		utils.Dispatch400Error(w, validationErrors.Error())
 		return
 	}
@@ -124,7 +126,9 @@ func UpdateApplication(w http.ResponseWriter, r *http.Request) {
 	}
 
 	update := models.Application{}
-	if input.Name != "" {
+	update.Name = input.Name
+	update.ApiKey = input.ApiKey
+	if input.Name != "" && input.Name != application.Name {
 		// validate duplicate application name for a user
 		_, exist, err := application.FetchApplication(db, models.Application{Name: input.Name, UserID: userId})
 		if err != nil {

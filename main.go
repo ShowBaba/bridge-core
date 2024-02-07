@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/showbaba/query-bridge/bridge-core/queues"
 	"golang.org/x/sync/errgroup"
 	"log"
 	"net/http"
@@ -59,7 +60,7 @@ func main() {
 	}
 
 	g.Go(func() error {
-		if err := database.InitDBQueue(dbClient, mongoClient, qConn); err != nil {
+		if err := queues.InitDBQueue(dbClient, mongoClient, qConn); err != nil {
 			return fmt.Errorf(`error initializing database queue; %v`, err)
 		}
 		return nil

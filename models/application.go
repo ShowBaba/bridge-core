@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -32,7 +33,10 @@ func (a *Application) FetchApplication(db *gorm.DB, q Application) (*Application
 }
 
 func (a *Application) Update(db *gorm.DB, updates Application) error {
-	return db.Model(a).Where("id = ?", a.ID).Updates(updates).Error
+	fmt.Println("update; ", updates.ApiKey)
+	return db.Model(a).Where("id = ?", a.ID).Updates(
+		map[string]interface{}{"name": updates.Name, "api_key": updates.ApiKey},
+	).Error
 }
 
 func (a *Application) Delete(db *gorm.DB, condition *Application) error {
