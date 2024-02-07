@@ -322,6 +322,7 @@ func AddDatabases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	database = &models.Database{
+		Name:          input.Name,
 		Host:          input.Host,
 		Port:          input.Port,
 		Database:      input.Database,

@@ -9,6 +9,7 @@ import (
 
 type Database struct {
 	ID            uint `gorm:"primaryKey"`
+	Name          string
 	Host          string
 	Port          uint
 	Database      string
@@ -16,7 +17,7 @@ type Database struct {
 	Password      string
 	DbEngine      string    `json:"db_engine"`
 	ApplicationID uint      `json:"application_id"`
-	UserID uint `json:"user_id"`
+	UserID        uint      `json:"user_id"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
@@ -48,7 +49,7 @@ func (d *Database) FetchDatabases(db *gorm.DB, q Database) ([]Database, error) {
 }
 
 func (d *Database) Update(db *gorm.DB, updates map[string]interface{}) error {
-	return db.Model(d).Where("id = ?", d.ID).Updates(updates).Error;
+	return db.Model(d).Where("id = ?", d.ID).Updates(updates).Error
 }
 
 func (d *Database) Delete(db *gorm.DB, condition *Database) error {

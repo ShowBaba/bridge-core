@@ -7,4 +7,5 @@ type UpdateDatabasePayload struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	DbEngine string `json:"db_engine"`
+	Name     string `json:"name"`
 }

@@ -114,6 +114,9 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	if input.DbEngine == "" {
 		input.DbEngine = database.DbEngine
 	}
+	if input.Name == "" {
+		input.Name = database.Name
+	}
 
 	dbConn, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
 		Host:     input.Host,
@@ -143,6 +146,7 @@ func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
 		"Username": input.Username,
 		"Password": encryptedPassword,
 		"DbEngine": input.DbEngine,
+		"Name":     input.Name,
 	})
 	if err != nil {
 		utils.Dispatch500Error(w, err.Error())

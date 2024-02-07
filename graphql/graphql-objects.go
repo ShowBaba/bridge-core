@@ -37,6 +37,7 @@ var DatabaseType = graphql.NewObject(
 		Name: "Database",
 		Fields: graphql.Fields{
 			"ID":            &graphql.Field{Type: graphql.Int},
+			"Name":          &graphql.Field{Type: graphql.String},
 			"Host":          &graphql.Field{Type: graphql.String},
 			"Port":          &graphql.Field{Type: graphql.Int},
 			"Database":      &graphql.Field{Type: graphql.String},
