@@ -13,12 +13,12 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
@@ -26,31 +26,23 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func ValidateAuthHeaderToken(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "application/json")
-
-		authHeader := r.Header.Get("Authorization")
+func ValidateAuthHeaderToken() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		authHeader := c.Get("Authorization")
 		if authHeader == "" {
-			Dispatch400Error(w, "auth token not in header")
-			return
+			return Dispatch400Error(c, "auth token not in header")
 		}
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			Dispatch400Error(w, "bearer token not in header")
-			return
+			return Dispatch400Error(c, "bearer token not in header")
 		}
 		claim, err := ValidateAuthToken(parts[1], GetConfig().JWTSecretKey)
 		if err != nil {
-			Dispatch400Error(w, fmt.Sprintf("error validating auth token token: %v", err))
-			return
+			return Dispatch400Error(c, fmt.Sprintf("error validating auth token token: %v", err))
 		}
-		// set values in the request context
-		ctx := context.WithValue(r.Context(), KeyEmail, claim.Email)
-		ctx = context.WithValue(r.Context(), KeyID, claim.ID)
-		r = r.WithContext(ctx)
-		next(w, r)
+		c.Locals("email", claim.Email)
+		c.Locals("id", claim.ID)
+		return c.Next()
 	}
 }
 
@@ -132,6 +124,7 @@ func TestDatabaseConnection(payload DatabaseConnectionPayload) (*sql.DB, error) 
 	return db, nil
 }
 
+// PublishMessageToQueue utility funcitont to publishh message to a selected queue name
 func PublishMessageToQueue(ctx context.Context, conn *amqp091.Connection, message []byte, queueName string) error {
 	fmt.Println("publishing to ", queueName)
 	ch, err := conn.Channel()
@@ -142,7 +135,7 @@ func PublishMessageToQueue(ctx context.Context, conn *amqp091.Connection, messag
 
 	err = ch.PublishWithContext(ctx, queueName, "", false, false, amqp091.Publishing{
 		ContentType: "text/plain",
-		Body:        []byte(message),
+		Body:        message,
 	},
 	)
 
@@ -228,4 +221,17 @@ func unpadPlaintext(paddedPlaintext []byte) ([]byte, error) {
 
 func BoolPointer(b bool) *bool {
 	return &b
+}
+
+type ipKey struct{}
+
+func ContextWithIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, ipKey{}, ip)
+}
+
+func GetIPAddressFromCtx(ctx context.Context) string {
+	if v, ok := ctx.Value(ipKey{}).(string); ok {
+		return v
+	}
+	return ""
 }

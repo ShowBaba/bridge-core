@@ -9,7 +9,7 @@ import (
 
 type AuthTokenJwtClaim struct {
 	Email string
-	ID    uint
+	ID    string
 	jwt.StandardClaims
 }
 
@@ -36,9 +36,9 @@ func (mail *Mail) BuildMessage() string {
 }
 
 type DatabaseTask struct {
-	DatabaseID    uint
-	ApplicationID uint
-	UserID        uint
+	DatabaseID    string
+	ApplicationID string
+	UserID        string
 	Action        DATABASE_TASK_ACTION
 }
 
@@ -69,4 +69,11 @@ type SchemaData struct {
 type TableData struct {
 	Table   string
 	Columns []string
+}
+
+type ListOpts struct {
+	Limit     int
+	Offset    int
+	OrderBy   string
+	OrderDesc bool
 }

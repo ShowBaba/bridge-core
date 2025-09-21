@@ -1,24 +1,22 @@
 package application
 
 import (
-	"context"
-	"github.com/gorilla/mux"
+	"github.com/gofiber/fiber/v2"
 	"github.com/rabbitmq/amqp091-go"
-	"github.com/showbaba/query-bridge/bridge-core/utils"
+	"github.com/showbaba/query-bridge/bridge-core/audit"
 	"gorm.io/gorm"
+
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
-var (
-	db              *gorm.DB
-	ctx             = context.Background()
-	queueConnection *amqp091.Connection
-)
+func InitializeApplicationRoutes(app *fiber.App, db *gorm.DB, qC *amqp091.Connection) {
+	repo := NewRepository(db)
+	svc := NewService(repo, qC, audit.NewService(audit.NewRepository(db)))
+	h := NewHandler(svc)
 
-func InitializeApplicationRoutes(router *mux.Router, dbClient *gorm.DB, qC *amqp091.Connection) {
-	db = dbClient
-	queueConnection = qC
-	router.HandleFunc("/create", utils.ValidateAuthHeaderToken(CreateApplication)).Methods("POST")
-	router.HandleFunc("/{application_id}/update", utils.ValidateAuthHeaderToken(UpdateApplication)).Methods("PATCH")
-	router.HandleFunc("/{application_id}/delete", utils.ValidateAuthHeaderToken(DeleteApplication)).Methods("DELETE")
-	router.HandleFunc("/{application_id}/add-database", utils.ValidateAuthHeaderToken(AddDatabases)).Methods("POST")
+	r := app.Group("/application", utils.ValidateAuthHeaderToken())
+
+	r.Post("/create", h.createApplication)
+	r.Patch("/:application_id/update", h.updateApplication)
+	r.Delete("/:application_id/delete", h.deleteApplication)
 }

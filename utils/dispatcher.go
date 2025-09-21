@@ -1,41 +1,49 @@
 package utils
 
 import (
-	"net/http"
+	"github.com/apitoolkit/apitoolkit-go"
+	"github.com/gofiber/fiber/v2"
 )
 
-// Dispatch500Error 500 - internal server error
-func Dispatch500Error(w http.ResponseWriter, msg string) {
-	w.WriteHeader(http.StatusInternalServerError)
-	w.Write(WriteError(http.StatusInternalServerError, msg))
+func Dispatch500Error(c *fiber.Ctx, err error) error {
+	apitoolkit.ReportError(c.UserContext(), err)
+	return c.Status(fiber.StatusInternalServerError).JSON(APIResponse{
+		Status:  fiber.StatusInternalServerError,
+		Message: err.Error(),
+	})
 }
 
-// Dispatch501Error - not implemented
-func Dispatch501Error(w http.ResponseWriter, msg string) {
-	w.WriteHeader(http.StatusNotImplemented)
-	w.Write(WriteError(http.StatusNotImplemented, msg))
+func Dispatch501Error(c *fiber.Ctx, msg string) error {
+	return c.Status(fiber.StatusNotImplemented).JSON(APIResponse{
+		Status:  fiber.StatusNotImplemented,
+		Message: msg,
+	})
 }
 
-// Dispatch405Error - method not allowed
-func Dispatch405Error(w http.ResponseWriter, msg string) {
-	w.WriteHeader(http.StatusMethodNotAllowed)
-	w.Write(WriteError(http.StatusMethodNotAllowed, msg))
+func Dispatch405Error(c *fiber.Ctx, msg string) error {
+	return c.Status(fiber.StatusMethodNotAllowed).JSON(APIResponse{
+		Status:  fiber.StatusMethodNotAllowed,
+		Message: msg,
+	})
 }
 
-// Dispatch400Error - bad request
-func Dispatch400Error(w http.ResponseWriter, msg string) {
-	w.WriteHeader(http.StatusBadRequest)
-	w.Write(WriteError(http.StatusBadRequest, msg))
+func Dispatch400Error(c *fiber.Ctx, msg string) error {
+	return c.Status(fiber.StatusBadRequest).JSON(APIResponse{
+		Status:  fiber.StatusBadRequest,
+		Message: msg,
+	})
 }
 
-// Dispatch401Error - unauthorized
-func Dispatch401Error(w http.ResponseWriter, msg string) {
-	w.WriteHeader(http.StatusUnauthorized)
-	w.Write(WriteError(http.StatusUnauthorized, msg))
+func Dispatch401Error(c *fiber.Ctx, msg string) error {
+	return c.Status(fiber.StatusUnauthorized).JSON(APIResponse{
+		Status:  fiber.StatusUnauthorized,
+		Message: msg,
+	})
 }
 
-// Dispatch404Error - not found
-func Dispatch404Error(w http.ResponseWriter, msg string) {
-	w.WriteHeader(http.StatusNotFound)
-	w.Write(WriteError(http.StatusNotFound, msg))
+func Dispatch404Error(c *fiber.Ctx, msg string) error {
+	return c.Status(fiber.StatusNotFound).JSON(APIResponse{
+		Status:  fiber.StatusNotFound,
+		Message: msg,
+	})
 }

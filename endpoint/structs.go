@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/database"
 )
 
 type CreateEndpointInput struct {
 	Name           string   `json:"name"  validate:"required"`
-	ApplicationID  uint     `json:"application_id"  validate:"required"`
-	TableID        uint     `json:"table_id"  validate:"required"`
+	ApplicationID  string   `json:"application_id"  validate:"required"`
+	TableID        string   `json:"table_id"  validate:"required"`
 	Method         string   `json:"method"  validate:"required"`
 	Columns        []string `json:"columns"`
 	IsPublic       *bool    `json:"is_public"  validate:"required"`
@@ -46,7 +46,7 @@ func (input *CreateEndpointInput) ValidateOrderDirection() error {
 	return nil
 }
 
-func ValidateOrderByColumnExist(columns []models.Column, orderBy string) error {
+func validateOrderByColumnExist(columns []database.Column, orderBy string) error {
 	for _, col := range columns {
 		if col.Name == orderBy {
 			return nil
@@ -61,7 +61,7 @@ type ExecuteEndpointInput struct {
 
 type UpdateEndpointInput struct {
 	Name           string   `json:"name"`
-	TableID        uint     `json:"table_id"`
+	TableID        string   `json:"table_id"`
 	Method         string   `json:"method"`
 	Columns        []string `json:"columns"`
 	IsPublic       *bool    `json:"is_public"`

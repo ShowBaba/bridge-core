@@ -1,23 +1,20 @@
 package user
 
 import (
-	"context"
-	"github.com/showbaba/query-bridge/bridge-core/utils"
-
-	"github.com/gorilla/mux"
+	"github.com/gofiber/fiber/v2"
 	"github.com/rabbitmq/amqp091-go"
 	"gorm.io/gorm"
+
+	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
-var (
-	db              *gorm.DB
-	queueConnection *amqp091.Connection
-	ctx             = context.Background()
-)
+func InitializeUserRoutes(app fiber.Router, dbClient *gorm.DB, qC *amqp091.Connection) {
+	repo := NewRepository(dbClient)
+	svc := NewService(repo, qC)
+	h := NewHandler(svc)
 
-func InitializeUserRoutes(router *mux.Router, dbClient *gorm.DB, qC *amqp091.Connection) {
-	queueConnection = qC
-	db = dbClient
-	router.HandleFunc("/register", RegisterHandler).Methods("POST")
-	router.HandleFunc("/get-profile", utils.ValidateAuthHeaderToken(GetUserProfileHandler)).Methods("GET")
+	r := app.Group("/user")
+
+	r.Post("/register", h.Register)
+	r.Get("/get-profile", utils.ValidateAuthHeaderToken(), h.GetProfile)
 }

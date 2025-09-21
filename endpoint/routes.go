@@ -1,23 +1,25 @@
 package endpoint
 
 import (
-	"context"
-	"github.com/gorilla/mux"
+	"github.com/gofiber/fiber/v2"
+	"github.com/rabbitmq/amqp091-go"
+	"github.com/showbaba/query-bridge/bridge-core/application"
+	"github.com/showbaba/query-bridge/bridge-core/audit"
+	"github.com/showbaba/query-bridge/bridge-core/database"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
-	"go.mongodb.org/mongo-driver/mongo"
 	"gorm.io/gorm"
 )
 
-var (
-	db          *gorm.DB
-	ctx         = context.Background()
-	mongoClient *mongo.Client
-)
+func InitializeEndpointRoutes(app fiber.Router, db *gorm.DB, qC *amqp091.Connection) {
+	repo := NewRepository(db)
+	applicationSvc := application.NewService(application.NewRepository(db), qC, audit.NewService(audit.NewRepository(db)))
+	databaseSvc := database.NewService(database.NewRepository(db), applicationSvc, audit.NewService(audit.NewRepository(db)), qC)
+	svc := NewService(repo, applicationSvc, databaseSvc, audit.NewService(audit.NewRepository(db)))
+	h := NewHandler(svc)
 
-func InitializeEndpointRoutes(router *mux.Router, dbClient *gorm.DB, mongoCl *mongo.Client) {
-	db = dbClient
-	mongoClient = mongoCl
-	router.HandleFunc("/{database_id}/create", utils.ValidateAuthHeaderToken(CreateEndpointHandler)).Methods("POST")
-	router.HandleFunc("/execute/{identifier}", utils.ValidateAuthHeaderToken(ExecuteEndpointHandler)).Methods("POST")
-	router.HandleFunc("/update/{endpoint_id}", utils.ValidateAuthHeaderToken(UpdateEndpointHandler)).Methods("PATCH")
+	r := app.Group("/endpoint", utils.ValidateAuthHeaderToken())
+
+	r.Post("/:database_id/create", h.create)
+	r.Post("/execute/:identifier", h.execute)
+	r.Patch("/:endpoint_id/update", h.update)
 }

@@ -4,71 +4,67 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/graphql-go/graphql"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
-func RunGQL(w http.ResponseWriter, r *http.Request, schema graphql.Schema, ctx context.Context) {
-	// Read the query
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		utils.Dispatch400Error(w, "invalid request body: %s")
-		return
+func RunGQL(c *fiber.Ctx, schema graphql.Schema, ctx context.Context) error {
+	body := c.Body()
+	if len(body) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "failure", "message": "invalid request body"})
 	}
 
 	var (
-		payload GraphQLPayload
+		payload Payload
 		resp    *graphql.Result
 	)
 
-	if err := json.Unmarshal(body, &payload); err == nil {
-		if !strings.Contains(payload.Query, "__schema") {
-			// not an introspection query, so add auth validator
-			authHeader := r.Header.Get("Authorization")
+	isIntrospection := false
+	err := json.Unmarshal(body, &payload)
+	if err == nil {
+		q := payload.Query
+		on := payload.OperationName
+		isIntrospection = strings.Contains(q, "__schema") || strings.Contains(q, "__type") || on == "IntrospectionQuery"
+
+		if !isIntrospection {
+			authHeader := c.Get("Authorization")
 			if authHeader == "" {
-				utils.Dispatch400Error(w, "auth token not in header")
-				return
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "failure", "message": "auth token not in header"})
 			}
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				utils.Dispatch400Error(w, "bearer token not in header")
-				return
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "failure", "message": "bearer token not in header"})
 			}
 			claim, err := utils.ValidateAuthToken(parts[1], utils.GetConfig().JWTSecretKey)
 			if err != nil {
-				utils.Dispatch400Error(w, fmt.Sprintf("error validating auth token token: %v", err))
-				return
+				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "failure", "message": fmt.Sprintf("error validating auth token token: %v", err)})
 			}
-			ctx = context.WithValue(r.Context(), utils.KeyID, claim.ID)
+			ctx = context.WithValue(ctx, utils.KeyID, claim.ID)
 		}
+
 		resp = graphql.Do(graphql.Params{
 			Schema:         schema,
 			RequestString:  payload.Query,
 			VariableValues: payload.Variables,
+			OperationName:  payload.OperationName,
 			Context:        ctx,
 		})
 	} else {
+		q := string(body)
+		isIntrospection = strings.Contains(q, "__schema") || strings.Contains(q, "__type")
 		resp = graphql.Do(graphql.Params{
 			Schema:        schema,
-			RequestString: string(body),
+			RequestString: q,
 			Context:       ctx,
 		})
 	}
 
 	if len(resp.Errors) > 0 {
-		utils.Dispatch400Error(w, fmt.Sprintf("%+v", resp.Errors))
-		return
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "failure", "message": fmt.Sprintf("%+v", resp.Errors)})
 	}
 
-	responseJSON(w, resp)
-}
-
-func responseJSON(w http.ResponseWriter, data interface{}) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	return c.JSON(resp)
 }

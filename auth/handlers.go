@@ -1,70 +1,57 @@
 package auth
 
 import (
-	"encoding/json"
-	"io"
-	"net/http"
+	"errors"
 
-	"github.com/go-playground/validator"
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/go-playground/validator/v10"
+	"github.com/gofiber/fiber/v2"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
+type Handler struct {
+	svc Service
+}
+
+func NewHandler(svc Service) *Handler {
+	return &Handler{svc}
+}
+
+func (h *Handler) login(c *fiber.Ctx) error {
+	ip := c.IP()
+
+	ctx := utils.ContextWithIP(c.UserContext(), ip)
 	var input LoginPayload
-	if body, err := io.ReadAll(r.Body); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
-		return
-	} else if err := json.Unmarshal(body, &input); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
-		return
+	if err := c.BodyParser(&input); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
 	}
-	validate := validator.New()
-	err := validate.Struct(input)
+
+	v := validator.New()
+	if err := v.Struct(input); err != nil {
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			return utils.Dispatch400Error(c, ve.Error())
+		}
+		return utils.Dispatch400Error(c, "invalid payload")
+	}
+
+	token, err := h.svc.login(ctx, input)
 	if err != nil {
-		validationErrors := err.(validator.ValidationErrors)
-		utils.Dispatch400Error(w, validationErrors.Error())
-		return
+		if errors.Is(err, ErrUserNotFound) {
+			return utils.Dispatch400Error(c, "email is not registered")
+		}
+		if errors.Is(err, ErrInvalidLogin) {
+			return utils.Dispatch400Error(c, "incorrect password")
+		}
+		return utils.Dispatch500Error(c, err)
 	}
-	var user *models.User
-	user, err = user.GetUser(db, models.User{Email: input.Email})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if user == nil {
-		utils.Dispatch404Error(w, "email is not registered")
-		return
-	}
-	passwordMatch, err := PasswordMatches(input.Password, user.Password)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if !passwordMatch {
-		utils.Dispatch404Error(w, "incorrect password")
-		return
-	}
-	jwtToken, err := GenerateToken(utils.GetConfig().JWTSecretKey, input.Email, user.ID)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
+
 	type Token struct {
 		Token string `json:"token"`
 	}
-	token := Token{Token: jwtToken}
-	response := utils.APIResponse{
-		Status:  http.StatusOK,
+	resp := utils.APIResponse{
+		Status:  fiber.StatusOK,
 		Message: "login successfully",
-		Data:    token,
+		Data:    Token{Token: token},
 	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	w.Write(responseJSON)
+	return c.Status(fiber.StatusOK).JSON(resp)
 }

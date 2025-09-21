@@ -49,6 +49,8 @@ func makeListField(listType graphql.Output, resolve graphql.FieldResolveFn) *gra
 		fields = SchemaType.Fields()
 	case "TableList":
 		fields = TableType.Fields()
+	case "AuditList":
+		fields = AuditType.Fields()
 	}
 
 	for key, val := range fields {
@@ -98,31 +100,31 @@ func parseDbClause(params graphql.ResolveParams, tx *gorm.DB, nodeType *graphql.
 			continue
 		}
 		// handle tables with possible ambiguous id
-		if key == "ID" && nodeType.Name() == "Application" {
-			tx = tx.Where("applications.id = ?", val.(int))
+		if key == "id" && nodeType.Name() == "Application" {
+			tx = tx.Where("applications.id = ?", val.(string))
 			continue
 		}
-		if key == "ID" && nodeType.Name() == "Database" {
-			tx = tx.Where("databases.id = ?", val.(int))
+		if key == "id" && nodeType.Name() == "Database" {
+			tx = tx.Where("databases.id = ?", val.(string))
 			continue
 		}
-		if key == "ID" && nodeType.Name() == "Column" {
-			tx = tx.Where("columns.id = ?", val.(int))
+		if key == "id" && nodeType.Name() == "Column" {
+			tx = tx.Where("columns.id = ?", val.(string))
 			continue
 		}
-		if key == "ID" && nodeType.Name() == "Endpoint" {
-			tx = tx.Where("endpoints.id = ?", val.(int))
+		if key == "id" && nodeType.Name() == "Endpoint" {
+			tx = tx.Where("endpoints.id = ?", val.(string))
 			continue
 		}
-		if key == "ID" && nodeType.Name() == "Schema" {
-			tx = tx.Where("schemas.id = ?", val.(int))
+		if key == "id" && nodeType.Name() == "Schema" {
+			tx = tx.Where("schemas.id = ?", val.(string))
 			continue
 		}
-		if key == "ID" && nodeType.Name() == "Table" {
-			tx = tx.Where("tables.id = ?", val.(int))
+		if key == "id" && nodeType.Name() == "Table" {
+			tx = tx.Where("tables.id = ?", val.(string))
 			continue
 		}
-		
+
 		key = underscore(key)
 		switch field.Type {
 		case graphql.String:

@@ -1,367 +1,95 @@
 package application
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
-	"strconv"
 
-	"github.com/go-playground/validator"
-	"github.com/gorilla/mux"
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/go-playground/validator/v10"
+	"github.com/gofiber/fiber/v2"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
-func CreateApplication(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
+type Handler struct {
+	svc Service
+}
+
+func NewHandler(svc Service) *Handler {
+	return &Handler{svc}
+}
+
+func (h *Handler) createApplication(c *fiber.Ctx) error {
 	var input CreateApplicationPayload
-	if body, err := io.ReadAll(r.Body); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
-		return
-	} else if err := json.Unmarshal(body, &input); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
-		return
+	if err := c.BodyParser(&input); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
 	}
-	validate := validator.New()
-	err := validate.Struct(input)
-	if err != nil {
-		validationErrors := err.(validator.ValidationErrors)
-		utils.Dispatch400Error(w, validationErrors.Error())
-		return
+	v := validator.New()
+	if err := v.Struct(input); err != nil {
+		return utils.Dispatch400Error(c, err.(validator.ValidationErrors).Error())
 	}
-	// validate duplicate application name for a user
-	var application *models.Application
-	userId := r.Context().Value("id").(uint)
-
-	_, exist, err := application.FetchApplication(db, models.Application{Name: input.Name, UserID: userId})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
+	uid, ok := c.Locals("id").(string)
+	if !ok || uid == "" {
+		return utils.Dispatch400Error(c, "missing user id")
 	}
-	if exist {
-		utils.Dispatch400Error(w, "duplicate application name")
-		return
-	}
-	var encApiKey string
-	if input.ApiKey != "" {
-		encApiKey, err = utils.Encrypt([]byte(input.ApiKey), []byte(utils.GetConfig().EncryptionKey))
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
+	if err := h.svc.create(c.UserContext(), uid, input); err != nil {
+		if errors.Is(err, ErrDuplicateName) {
+			return utils.Dispatch400Error(c, "duplicate application name")
 		}
+		return utils.Dispatch500Error(c, err)
 	}
-	application = &models.Application{
-		Name:   input.Name,
-		UserID: userId,
-		ApiKey: encApiKey,
-	}
-	err = application.Insert(db)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	response := utils.APIResponse{
-		Status:  http.StatusCreated,
+	return c.Status(fiber.StatusCreated).JSON(utils.APIResponse{
+		Status:  fiber.StatusCreated,
 		Message: "application created successfully",
-	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	w.Write(responseJSON)
-}
-
-func UpdateApplication(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	var input UpdateApplicationPayload
-	if body, err := io.ReadAll(r.Body); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
-		return
-	} else if err := json.Unmarshal(body, &input); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
-		return
-	}
-	validate := validator.New()
-	err := validate.Struct(input)
-	if err != nil {
-		var validationErrors validator.ValidationErrors
-		errors.As(err, &validationErrors)
-		utils.Dispatch400Error(w, validationErrors.Error())
-		return
-	}
-	vars := mux.Vars(r)
-	applicationIDStr, ok := vars["application_id"]
-	if !ok || applicationIDStr == "" {
-		utils.Dispatch400Error(w, "missing application_id in request")
-		return
-	}
-	userId := r.Context().Value("id").(uint)
-
-	// Validate application_id
-	if !ok || applicationIDStr == "" {
-		utils.Dispatch400Error(w, "invalid or missing application ID")
-		return
-	}
-
-	applicationID, err := strconv.Atoi(applicationIDStr)
-	if err != nil {
-		utils.Dispatch400Error(w, "invalid application ID format")
-		return
-	}
-
-	var application *models.Application
-	application, exist, err := application.FetchApplication(db, models.Application{ID: uint(applicationID), UserID: userId})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if !exist {
-		utils.Dispatch404Error(w, "cannot find application")
-		return
-	}
-
-	update := models.Application{}
-	update.Name = input.Name
-	update.ApiKey = input.ApiKey
-	if input.Name != "" && input.Name != application.Name {
-		// validate duplicate application name for a user
-		_, exist, err := application.FetchApplication(db, models.Application{Name: input.Name, UserID: userId})
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-		if exist {
-			utils.Dispatch400Error(w, "duplicate application name")
-			return
-		}
-		update.Name = input.Name
-	}
-	if input.ApiKey != "" {
-		var encApiKey string
-		encApiKey, err = utils.Encrypt([]byte(input.ApiKey), []byte(utils.GetConfig().EncryptionKey))
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-		update.ApiKey = encApiKey
-	}
-
-	err = application.Update(db, update)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	response := utils.APIResponse{
-		Status:  http.StatusOK,
-		Message: "application updated successfully",
-	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	w.Write(responseJSON)
-}
-
-func DeleteApplication(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-
-	vars := mux.Vars(r)
-	applicationIDStr, ok := vars["application_id"]
-	if !ok || applicationIDStr == "" {
-		utils.Dispatch400Error(w, "missing application_id in request")
-		return
-	}
-	userId := r.Context().Value("id").(uint)
-
-	// Validate application_id
-	if !ok || applicationIDStr == "" {
-		utils.Dispatch400Error(w, "invalid or missing application ID")
-		return
-	}
-
-	applicationID, err := strconv.Atoi(applicationIDStr)
-	if err != nil {
-		utils.Dispatch400Error(w, "invalid application ID format")
-		return
-	}
-
-	var application *models.Application
-	application, exist, err := application.FetchApplication(db, models.Application{ID: uint(applicationID), UserID: userId})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if !exist {
-		utils.Dispatch404Error(w, "cannot find application")
-		return
-	}
-
-	// delete other associating resources
-	databaseTask := utils.DatabaseTask{
-		UserID:        userId,
-		ApplicationID: application.ID,
-		Action:        utils.DeleteApplicationResourceAction,
-	}
-	payload, err := json.Marshal(databaseTask)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.DATABASE_QUEUE); err != nil {
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-	}
-
-	if err = application.Delete(db, &models.Application{ID: application.ID}); err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-
-	response := utils.APIResponse{
-		Status:  http.StatusOK,
-		Message: "application deleted successfully",
-	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	w.Write(responseJSON)
-}
-
-func AddDatabases(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	var input AddDatabasePayload
-	if body, err := io.ReadAll(r.Body); err != nil {
-		utils.Dispatch400Error(w, fmt.Sprintf("invalid body: %s", err.Error()))
-		return
-	} else if err := json.Unmarshal(body, &input); err != nil {
-		utils.Dispatch400Error(w, fmt.Sprintf("invalid body: %s", err.Error()))
-		return
-	}
-	validate := validator.New()
-	err := validate.Struct(input)
-	if err != nil {
-		validationErrors := err.(validator.ValidationErrors)
-		utils.Dispatch400Error(w, validationErrors.Error())
-		return
-	}
-
-	vars := mux.Vars(r)
-	applicationIDStr, ok := vars["application_id"]
-	if !ok || applicationIDStr == "" {
-		utils.Dispatch400Error(w, "missing application_id in request")
-		return
-	}
-	userId := r.Context().Value("id").(uint)
-
-	// Validate application_id
-	if !ok || applicationIDStr == "" {
-		utils.Dispatch400Error(w, "invalid or missing application ID")
-		return
-	}
-
-	applicationID, err := strconv.Atoi(applicationIDStr)
-	if err != nil {
-		utils.Dispatch400Error(w, "invalid application ID format")
-		return
-	}
-
-	var application *models.Application
-	_, exist, err := application.FetchApplication(db, models.Application{ID: uint(applicationID), UserID: userId})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if !exist {
-		utils.Dispatch404Error(w, "cannot find application")
-		return
-	}
-	// validate duplicate db name
-	var database *models.Database
-
-	_, exist, err = database.FetchDatabase(db, models.Database{Database: input.Database, Host: input.Host, ApplicationID: uint(applicationID)})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if exist {
-		utils.Dispatch400Error(w, "duplicate database name")
-		return
-	}
-
-	dbConn, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
-		Host:     input.Host,
-		Port:     input.Port,
-		Database: input.Database,
-		Username: input.Username,
-		Password: input.Password,
-		DbEngine: input.DbEngine,
 	})
-	if err != nil {
-		utils.Dispatch400Error(w, fmt.Sprintf(`error creating database connection; err: (%v)`, err))
-		return
-	}
+}
 
-	// close the database connection
-	dbConn.Close()
-
-	encryptedPassword, err := utils.Encrypt([]byte(input.Password), []byte(utils.GetConfig().EncryptionKey))
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
+func (h *Handler) updateApplication(c *fiber.Ctx) error {
+	var input UpdateApplicationPayload
+	if err := c.BodyParser(&input); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
 	}
-	database = &models.Database{
-		Name:          input.Name,
-		Host:          input.Host,
-		Port:          input.Port,
-		Database:      input.Database,
-		Username:      input.Username,
-		Password:      encryptedPassword,
-		DbEngine:      input.DbEngine,
-		ApplicationID: uint(applicationID),
-		UserID:        userId,
+	v := validator.New()
+	if err := v.Struct(input); err != nil {
+		return utils.Dispatch400Error(c, err.Error())
 	}
-	id, err := database.Insert(db)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
+	appID := c.Params("application_id")
+	if appID == "" {
+		return utils.Dispatch400Error(c, "missing application_id in request")
 	}
-	// fetch db schema and schema tables asynchronously
-	databaseTask := utils.DatabaseTask{
-		DatabaseID: id,
-		UserID:     userId,
-		Action:     utils.FetchDBAction,
+	uid, ok := c.Locals("id").(string)
+	if !ok || uid == "" {
+		return utils.Dispatch400Error(c, "missing user id")
 	}
-	payload, err := json.Marshal(databaseTask)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.DATABASE_QUEUE); err != nil {
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
+	if err := h.svc.update(c.UserContext(), uid, appID, input); err != nil {
+		if errors.Is(err, ErrDuplicateName) {
+			return utils.Dispatch400Error(c, "duplicate application name")
 		}
+		if errors.Is(err, ErrNotFound) {
+			return utils.Dispatch404Error(c, "cannot find application")
+		}
+		return utils.Dispatch500Error(c, err)
 	}
-	response := utils.APIResponse{
-		Status:  http.StatusCreated,
-		Message: "database created successfully",
+	return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "application updated successfully",
+	})
+}
+
+func (h *Handler) deleteApplication(c *fiber.Ctx) error {
+	appID := c.Params("application_id")
+	if appID == "" {
+		return utils.Dispatch400Error(c, "missing application_id in request")
 	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
+	uid, ok := c.Locals("id").(string)
+	if !ok || uid == "" {
+		return utils.Dispatch400Error(c, "missing user id")
 	}
-	w.Write(responseJSON)
+	if err := h.svc.delete(c.UserContext(), uid, appID); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return utils.Dispatch404Error(c, "cannot find application")
+		}
+		return utils.Dispatch500Error(c, err)
+	}
+	return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "application deleted successfully",
+	})
 }

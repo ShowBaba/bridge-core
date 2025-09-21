@@ -1,135 +1,77 @@
 package user
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
 
-	"github.com/go-playground/validator"
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/go-playground/validator/v10"
+	"github.com/gofiber/fiber/v2"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
-
-	"gorm.io/gorm"
 )
 
-func RegisterHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	var input RegisterPayload
-	if body, err := io.ReadAll(r.Body); err != nil {
-		utils.Dispatch400Error(w, fmt.Sprintf("invalid body: %s", err.Error()))
-		return
-	} else if err := json.Unmarshal(body, &input); err != nil {
-		utils.Dispatch400Error(w, fmt.Sprintf("invalid body: %s", err.Error()))
-		return
-	}
-	validate := validator.New()
-	err := validate.Struct(input)
-	if err != nil {
-		validationErrors := err.(validator.ValidationErrors)
-		utils.Dispatch400Error(w, validationErrors.Error())
-		return
-	}
-	var user *models.User
-	user, err = user.GetUser(db, models.User{Email: input.Email})
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if user != nil {
-		utils.Dispatch400Error(w, "email already used")
-		return
-	}
-	hash, err := utils.HashPassword(input.Password)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	user = &models.User{
-		Email:     input.Email,
-		FirstName: input.Firstname,
-		LastName:  input.Lastname,
-		Password:  hash,
-	}
-	_, err = user.Insert(db)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	mail := utils.Mail{
-		Sender:  utils.MAIL_USERNAME,
-		Subject: "Welcome QueryBridge!",
-		To:      []string{input.Email},
-		Body: `<div style="font-family: Helvetica, Arial, sans-serif; min-width: 1000px; overflow: auto; line-height: 2;">
-            <div style="margin: 50px auto; width: 70%; padding: 20px 0;">
-                <div style="border-bottom: 1px solid #eee;"><a href="google.com" style="font-size: 1.4em; color: #00466a; text-decoration: none; font-weight: 600;">QueryBridge</a></div>
-                <p style="font-size: 1.1em;">Hi,</p>
-                <p>Hi ` + input.Firstname + `</p>
-                <p>Welcome to QueryBridge</p>
-                <p style="font-size: 0.9em;">
-                    Regards,<br />
-                    QueryBridge
-                </p>
-                <hr style="border: none; border-top: 1px solid #eee;" />
-            </div>
-        </div>`,
-	}
-	payload, err := json.Marshal(mail)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.NOTIFICATION_QUEUE); err != nil {
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-	}
-	response := utils.APIResponse{
-		Status:  http.StatusOK,
-		Message: "user registered successfully",
-		Data:    nil,
-	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	w.Write(responseJSON)
+type Handler struct {
+	svc Service
 }
 
-func GetUserProfileHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
+func NewHandler(svc Service) *Handler {
+	return &Handler{svc}
+}
 
-	userId := r.Context().Value("id").(uint)
+func (h *Handler) Register(c *fiber.Ctx) error {
+	var input RegisterPayload
+	if err := c.BodyParser(&input); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
+	}
+	v := validator.New()
+	if err := v.Struct(input); err != nil {
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			return utils.Dispatch400Error(c, ve.Error())
+		}
+		return utils.Dispatch400Error(c, "invalid payload")
+	}
 
-	var user *models.User
-	user, err := user.GetUser(db, models.User{ID: userId})
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		utils.Dispatch500Error(w, err.Error())
-		return
+	u, err := h.svc.register(c.UserContext(), input)
+	if err != nil {
+		if errors.Is(err, ErrEmailInUse) {
+			return utils.Dispatch400Error(c, "email already used")
+		}
+		return utils.Dispatch500Error(c, err)
 	}
-	if user == nil {
-		utils.Dispatch400Error(w, "user does not")
-		return
-	}
-	response := utils.APIResponse{
-		Status:  http.StatusOK,
-		Message: "fetch user profile successfully",
-		Data: map[string]interface{}{
-			"email":     user.Email,
-			"firstname": user.FirstName,
-			"lastname":  user.LastName,
-			"id":        user.ID,
+
+	resp := utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "user registered successfully",
+		Data: map[string]string{
+			"email":     u.Email,
+			"firstname": u.FirstName,
+			"lastname":  u.LastName,
+			"id":        u.ID,
 		},
 	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
+	return c.Status(fiber.StatusOK).JSON(resp)
+}
+
+func (h *Handler) GetProfile(c *fiber.Ctx) error {
+	uid, ok := c.Locals("id").(string)
+	if !ok || uid == "" {
+		return utils.Dispatch400Error(c, "missing user id")
 	}
-	w.Write(responseJSON)
+	u, err := h.svc.getProfile(c.UserContext(), uid)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return utils.Dispatch404Error(c, "user does not exist")
+		}
+		return utils.Dispatch500Error(c, err)
+	}
+	resp := utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "fetch user profile successfully",
+		Data: map[string]interface{}{
+			"email":     u.Email,
+			"firstname": u.FirstName,
+			"lastname":  u.LastName,
+			"id":        u.ID,
+		},
+	}
+	return c.Status(fiber.StatusOK).JSON(resp)
 }

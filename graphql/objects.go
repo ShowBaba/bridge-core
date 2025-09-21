@@ -8,7 +8,7 @@ var UserType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "User",
 		Fields: graphql.Fields{
-			"ID":         &graphql.Field{Type: graphql.Int},
+			"id":         &graphql.Field{Type: graphql.String},
 			"email":      &graphql.Field{Type: graphql.String},
 			"firstname":  &graphql.Field{Type: graphql.String},
 			"lastname":   &graphql.Field{Type: graphql.String},
@@ -22,10 +22,10 @@ var ApplicationType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Application",
 		Fields: graphql.Fields{
-			"ID":         &graphql.Field{Type: graphql.Int},
+			"id":         &graphql.Field{Type: graphql.String},
 			"name":       &graphql.Field{Type: graphql.String},
 			"api_key":    &graphql.Field{Type: graphql.String},
-			"user_id":    &graphql.Field{Type: graphql.Int},
+			"user_id":    &graphql.Field{Type: graphql.String},
 			"created_at": &graphql.Field{Type: graphql.DateTime},
 			"updated_at": &graphql.Field{Type: graphql.DateTime},
 		},
@@ -36,7 +36,7 @@ var DatabaseType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Database",
 		Fields: graphql.Fields{
-			"ID":            &graphql.Field{Type: graphql.Int},
+			"id":            &graphql.Field{Type: graphql.String},
 			"Name":          &graphql.Field{Type: graphql.String},
 			"Host":          &graphql.Field{Type: graphql.String},
 			"Port":          &graphql.Field{Type: graphql.Int},
@@ -44,7 +44,7 @@ var DatabaseType = graphql.NewObject(
 			"Username":      &graphql.Field{Type: graphql.String},
 			"Password":      &graphql.Field{Type: graphql.String},
 			"DbEngine":      &graphql.Field{Type: graphql.String},
-			"ApplicationID": &graphql.Field{Type: graphql.Int},
+			"ApplicationID": &graphql.Field{Type: graphql.String},
 			"CreatedAt":     &graphql.Field{Type: graphql.DateTime},
 			"UpdatedAt":     &graphql.Field{Type: graphql.DateTime},
 		},
@@ -55,8 +55,8 @@ var ColumnType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Column",
 		Fields: graphql.Fields{
-			"ID":        &graphql.Field{Type: graphql.Int},
-			"TableID":   &graphql.Field{Type: graphql.Int},
+			"id":        &graphql.Field{Type: graphql.String},
+			"TableID":   &graphql.Field{Type: graphql.String},
 			"Name":      &graphql.Field{Type: graphql.String},
 			"CreatedAt": &graphql.Field{Type: graphql.DateTime},
 			"UpdatedAt": &graphql.Field{Type: graphql.DateTime},
@@ -68,11 +68,11 @@ var EndpointType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Endpoint",
 		Fields: graphql.Fields{
-			"ID":             &graphql.Field{Type: graphql.Int},
+			"id":             &graphql.Field{Type: graphql.Int},
 			"Name":           &graphql.Field{Type: graphql.String},
-			"ApplicationID":  &graphql.Field{Type: graphql.Int},
-			"DatabaseID":     &graphql.Field{Type: graphql.Int},
-			"TableID":        &graphql.Field{Type: graphql.Int},
+			"ApplicationID":  &graphql.Field{Type: graphql.String},
+			"DatabaseID":     &graphql.Field{Type: graphql.String},
+			"TableID":        &graphql.Field{Type: graphql.String},
 			"Limit":          &graphql.Field{Type: graphql.Int},
 			"OrderBy":        &graphql.Field{Type: graphql.String},
 			"OrderDirection": &graphql.Field{Type: graphql.String},
@@ -88,8 +88,8 @@ var SchemaType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Schema",
 		Fields: graphql.Fields{
-			"ID":         &graphql.Field{Type: graphql.Int},
-			"DatabaseID": &graphql.Field{Type: graphql.Int},
+			"id":         &graphql.Field{Type: graphql.String},
+			"DatabaseID": &graphql.Field{Type: graphql.String},
 			"Name":       &graphql.Field{Type: graphql.String},
 			"CreatedAt":  &graphql.Field{Type: graphql.DateTime},
 			"UpdatedAt":  &graphql.Field{Type: graphql.DateTime},
@@ -115,12 +115,50 @@ var TableType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Table",
 		Fields: graphql.Fields{
-			"ID":         &graphql.Field{Type: graphql.Int},
-			"SchemaID":   &graphql.Field{Type: graphql.Int},
+			"id":         &graphql.Field{Type: graphql.String},
+			"SchemaID":   &graphql.Field{Type: graphql.String},
 			"Name":       &graphql.Field{Type: graphql.String},
-			"DatabaseID": &graphql.Field{Type: graphql.Int},
+			"DatabaseID": &graphql.Field{Type: graphql.String},
 			"CreatedAt":  &graphql.Field{Type: graphql.DateTime},
 			"UpdatedAt":  &graphql.Field{Type: graphql.DateTime},
+		},
+	},
+)
+
+var AuditType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "Audit",
+		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"user_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"application_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"action": &graphql.Field{
+				Type: graphql.String,
+			},
+			"entity_type": &graphql.Field{
+				Type: graphql.String,
+			},
+			"entity_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"description": &graphql.Field{
+				Type: graphql.String,
+			},
+			"metadata": &graphql.Field{
+				Type: graphql.String,
+			},
+			"ip_address": &graphql.Field{
+				Type: graphql.String,
+			},
+			"created_at": &graphql.Field{
+				Type: graphql.DateTime,
+			},
 		},
 	},
 )

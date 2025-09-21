@@ -9,121 +9,101 @@ import (
 	"sync"
 
 	"github.com/rabbitmq/amqp091-go"
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	databasePkg "github.com/showbaba/query-bridge/bridge-core/database"
+	logPkg "github.com/showbaba/query-bridge/bridge-core/database-log"
+	endpointPkg "github.com/showbaba/query-bridge/bridge-core/endpoint"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 	"go.mongodb.org/mongo-driver/mongo"
 	"gorm.io/gorm"
 )
 
-var (
-	pgDbCLient  *gorm.DB
+type Queue struct {
+	pgDbClient  *gorm.DB
 	mongoClient *mongo.Client
-	ctx         = context.Background()
-)
+	qConn       *amqp091.Connection
+	databaseSvc databasePkg.Service
+	endpointSvc endpointPkg.Service
+	logSvc      logPkg.Service
+	ctx         context.Context
+}
 
-func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connection) error {
+func NewQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connection,
+	databaseSvc databasePkg.Service, endpointSvc endpointPkg.Service,
+	logSvc logPkg.Service) *Queue {
+	q := &Queue{
+		pgDbClient:  pg,
+		mongoClient: mongo,
+		qConn:       connection,
+		databaseSvc: databaseSvc,
+		endpointSvc: endpointSvc,
+		logSvc:      logSvc,
+		ctx:         context.Background(),
+	}
+	if err := q.initDBQueue(); err != nil {
+		panic(err)
+	}
+	return q
+}
+
+func (q *Queue) initDBQueue() error {
 	log.Println("setting up database tasks queue")
 
-	pgDbCLient = pg
-	mongoClient = mongo
-	channel, err := connection.Channel()
+	ch, err := q.qConn.Channel()
 	if err != nil {
 		return err
 	}
-	defer channel.Close()
 
-	err = channel.ExchangeDeclare(
-		utils.DATABASE_QUEUE,
-		amqp091.ExchangeTopic,
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		log.Fatalf("Failed to declare an exchange: %v", err)
+	if err := ch.ExchangeDeclare(utils.DATABASE_QUEUE, "topic", false, false, false, false, nil); err != nil {
+		return err
 	}
 
-	queue, err := channel.QueueDeclare(
-		utils.DATABASE_QUEUE,
-		false,
-		false,
-		false,
-		false,
-		nil,
-	)
+	queue, err := ch.QueueDeclare(utils.DATABASE_QUEUE, false, false, false, false, nil)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	err = channel.QueueBind(
-		queue.Name,
-		"",
-		utils.DATABASE_QUEUE,
-		false,
-		nil,
-	)
-	if err != nil {
-		log.Fatalf("Failed to bind the queue to the exchange: %v", err)
+	if err := ch.QueueBind(queue.Name, "", utils.DATABASE_QUEUE, false, nil); err != nil {
+		return err
 	}
 
-	databaseTasks, err := channel.Consume(
-		queue.Name,
-		"",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
+	databaseTasks, err := ch.Consume(queue.Name, "", true, false, false, false, nil)
 	if err != nil {
-		log.Printf("error subscribing to message - %v", err)
+		return err
 	}
 
-	var (
-		TotalWorkers = 10
-		requestCh    = make(chan utils.DatabaseTask, 20)
-		errorCh      = make(chan error, TotalWorkers)
-		waitGroup    = &sync.WaitGroup{}
-	)
+	const totalWorkers = 10
+	requestCh := make(chan utils.DatabaseTask, 2*totalWorkers)
+	errorCh := make(chan error, 2*totalWorkers)
 
-	// Start worker pool
-	for i := 0; i < TotalWorkers; i++ {
+	for i := 0; i < totalWorkers; i++ {
 		worker := &Worker{
-			id:        i,
-			waitGroup: waitGroup,
-			requestCh: requestCh,
-			errorCh:   errorCh,
+			id:          i,
+			requestCh:   requestCh,
+			errorCh:     errorCh,
+			pgDbClient:  q.pgDbClient,
+			mongoClient: q.mongoClient,
+			databaseSvc: q.databaseSvc,
+			queue:       q,
 		}
 		go worker.run()
-		go func(workerID int, errorCh chan error) {
-			for err := range errorCh {
-				log.Printf("Error from worker %v: %s", workerID, err)
-				// TODO: store logs for application
-			}
-		}(i, errorCh)
 	}
-
-	for databaseTask := range databaseTasks {
-		var task utils.DatabaseTask
-		err := json.Unmarshal(databaseTask.Body, &task)
-		if err != nil {
-			log.Println("error unmarshalling message:", err)
-			continue
-		}
-		requestCh <- task
-	}
-
-	go func(errorCh chan error) {
-		for err := range errorCh {
-			log.Printf("Error from worker: %s", err)
-			// TODO: store logs for application
-		}
-	}(errorCh)
 
 	go func() {
-		waitGroup.Wait()
+		for err := range errorCh {
+			log.Printf("worker error: %s", err)
+		}
+	}()
+
+	// producer
+	go func() {
+		for msg := range databaseTasks {
+			var task utils.DatabaseTask
+			if err := json.Unmarshal(msg.Body, &task); err != nil {
+				log.Println("error unmarshalling message:", err)
+				continue
+			}
+			requestCh <- task
+		}
 		close(requestCh)
 		close(errorCh)
 	}()
@@ -132,229 +112,225 @@ func InitDBQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connectio
 }
 
 type Worker struct {
-	id        int
-	waitGroup *sync.WaitGroup
-	requestCh chan utils.DatabaseTask
-	errorCh   chan error
+	id          int
+	requestCh   chan utils.DatabaseTask
+	errorCh     chan error
+	pgDbClient  *gorm.DB
+	mongoClient *mongo.Client
+	databaseSvc databasePkg.Service
+	queue       *Queue
 }
 
-func (w Worker) run() {
-	w.waitGroup.Add(1)
-
+func (w *Worker) run() {
 	for task := range w.requestCh {
 		log.Printf("Worker [%d] processing task with db id: (%v)", w.id, task.DatabaseID)
+		var err error
 		switch task.Action {
 		case utils.FetchDBAction:
-			err := handleFetchDbTask(task, pgDbCLient, mongoClient)
-			if err != nil {
-				// TODO: send notification to user, add endpoint to re-fetch db data
-				log.Printf("error processing [%s] task: %v, from worker: %v", utils.FetchDBAction, err, w.id)
-				w.errorCh <- err
-			}
+			err = w.queue.handleFetchDbTask(task)
 		case utils.DeleteApplicationResourceAction:
-			err := handleDeleteApplicationResourceTask(task, pgDbCLient, mongoClient)
-			if err != nil {
-				log.Printf("error processing [%s] task: %v, from worker: %v", utils.DeleteApplicationResourceAction, err, w.id)
-				w.errorCh <- err
-			}
+			err = w.queue.handleDeleteApplicationResourceTask(task)
 		case utils.DeleteDBResourceAction:
-			err := handleDeleteDBResourceTask(task, pgDbCLient, mongoClient)
-			if err != nil {
-				log.Printf("error processing [%s] task: %v, from worker: %v", utils.DeleteDBResourceAction, err, w.id)
-				w.errorCh <- err
+			err = w.queue.handleDeleteDBResourceTask(task)
+		}
+		if err != nil {
+			select {
+			case w.errorCh <- err:
+			default:
+				log.Printf("worker %d dropping error: %v", w.id, err)
 			}
 		}
 	}
-
-	w.waitGroup.Done()
 }
 
-func handleFetchDbTask(task utils.DatabaseTask, pgDb *gorm.DB, mongoClient *mongo.Client) error {
-	var database *models.Database
-	database, _, err := database.FetchDatabase(pgDb, models.Database{ID: task.DatabaseID})
+func (q *Queue) handleFetchDbTask(task utils.DatabaseTask) error {
+	dbRec, err := q.databaseSvc.Get(q.ctx, &databasePkg.Database{ID: task.DatabaseID})
 	if err != nil {
 		return fmt.Errorf("failed to fetch database: %v", err)
 	}
 
-	rawPassword, err := utils.Decrypt(database.Password, []byte(utils.GetConfig().EncryptionKey))
+	rawPassword, err := utils.Decrypt(dbRec.Password, []byte(utils.GetConfig().EncryptionKey))
 	if err != nil {
 		return fmt.Errorf("failed to decrypt password: %v", err)
 	}
 
 	appDbPg, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
-		Host:     database.Host,
-		Port:     database.Port,
-		Database: database.Database,
-		Username: database.Username,
+		Host:     dbRec.Host,
+		Port:     dbRec.Port,
+		Database: dbRec.Database,
+		Username: dbRec.Username,
 		Password: string(rawPassword),
-		DbEngine: database.DbEngine,
+		DbEngine: dbRec.DbEngine,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to test database connection: %v", err)
 	}
 
-	sqlLogCh := make(chan string)
-	errorCh := make(chan error)
-	resultCh := make(chan utils.SchemaData)
+	sqlLogCh := make(chan string, 32)
+	errCh := make(chan error, 32)
+	resultCh := make(chan utils.SchemaData, 32)
 
-	wg := sync.WaitGroup{}
-	wg.Add(3)
+	var wg sync.WaitGroup
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		FetchDatabaseInfo(appDbPg, sqlLogCh, resultCh, errorCh)
+		fetchDatabaseInfo(appDbPg, sqlLogCh, resultCh, errCh)
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		LogSqlQuery(ctx, mongoClient, database.ApplicationID, task.UserID, sqlLogCh, errorCh)
+		q.logSqlQuery(dbRec.ApplicationID, task.UserID, sqlLogCh, errCh)
 	}()
 
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		StoreData(pgDb, task.DatabaseID, task.UserID, resultCh, errorCh)
+		storeData(q.pgDbClient, task.DatabaseID, task.UserID, resultCh, errCh)
+	}()
+
+	// drain errors so producers never block
+	done := make(chan struct{})
+	go func() {
+		for e := range errCh {
+			log.Printf("pipeline error: %v", e)
+		}
+		close(done)
 	}()
 
 	go func() {
 		wg.Wait()
 		close(sqlLogCh)
-		close(errorCh)
 		close(resultCh)
+		close(errCh)
 	}()
 
+	<-done
 	return nil
 }
 
-func handleDeleteApplicationResourceTask(task utils.DatabaseTask, pgDb *gorm.DB, monogoClient *mongo.Client) error {
-	var endpoint models.Endpoint
-	var endpointIDs []uint
-	endpoints, err := endpoint.FetchEndpoints(pgDb, models.Endpoint{ApplicationID: task.ApplicationID})
+func (q *Queue) logSqlQuery(applicationID, userID string, ch <-chan string, errCh chan<- error) {
+	for logData := range ch {
+		err := q.logSvc.Create(logData, applicationID, userID)
+		if err != nil {
+			errCh <- err
+		}
+	}
+}
+
+func (q *Queue) handleDeleteApplicationResourceTask(task utils.DatabaseTask) error {
+	var endpointIDs []string
+	endpoints, err := q.endpointSvc.List(q.ctx, endpointPkg.Endpoint{ApplicationID: task.ApplicationID}, utils.ListOpts{})
 	if err != nil {
 		return err
 	}
-	for _, endpoint := range endpoints {
-		endpointIDs = append(endpointIDs, endpoint.ID)
+	for _, e := range endpoints {
+		endpointIDs = append(endpointIDs, e.ID)
 	}
-	if err := endpoint.DeleteMany(pgDb, endpointIDs); err != nil {
+	if err := q.endpointSvc.DeleteMany(q.ctx, endpointIDs); err != nil {
 		return err
 	}
 
-	var database models.Database
-	databases, err := database.FetchDatabases(pgDb, models.Database{ApplicationID: task.ApplicationID})
+	databases, err := q.databaseSvc.List(q.ctx, databasePkg.Database{ApplicationID: task.ApplicationID}, utils.ListOpts{})
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
 	var (
-		databaseIDs []uint
-		schemaIDs   []uint
-		tableIDs    []uint
-		columnIDs   []uint
+		databaseIDs []string
+		schemaIDs   []string
+		tableIDs    []string
+		columnIDs   []string
 	)
 
-	for _, database := range databases {
-		databaseIDs = append(databaseIDs, database.ID)
+	for _, d := range databases {
+		databaseIDs = append(databaseIDs, d.ID)
 
-		var schema models.Schema
-		schemas, err := schema.FetchSchemas(pgDb, models.Schema{DatabaseID: database.ID})
+		schemas, err := q.databaseSvc.ListSchemas(q.ctx, databasePkg.Schema{DatabaseID: d.ID})
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 
-		for _, schema := range schemas {
-			schemaIDs = append(schemaIDs, schema.ID)
+		for _, s := range schemas {
+			schemaIDs = append(schemaIDs, s.ID)
 
-			var table models.Table
-			tables, err := table.FetchTables(pgDb, models.Table{SchemaID: schema.ID})
+			tables, err := q.databaseSvc.ListTables(q.ctx, databasePkg.Table{SchemaID: s.ID})
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
 
-			for _, table := range tables {
-				tableIDs = append(tableIDs, table.ID)
+			for _, t := range tables {
+				tableIDs = append(tableIDs, t.ID)
 
-				var column models.Column
-				columns, err := column.FetchColumns(pgDb, models.Column{TableID: table.ID})
+				columns, err := q.databaseSvc.ListColumns(q.ctx, databasePkg.Column{TableID: t.ID})
 				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 					return err
 				}
 
-				for _, column := range columns {
-					columnIDs = append(columnIDs, column.ID)
+				for _, c := range columns {
+					columnIDs = append(columnIDs, c.ID)
 				}
 			}
 		}
 	}
 
-	var column *models.Column
-	if err := column.DeleteMany(pgDb, columnIDs); err != nil {
+	if err := q.databaseSvc.DeleteManyColumns(q.ctx, columnIDs); err != nil {
 		return err
 	}
-
-	var table *models.Table
-	if err := table.DeleteMany(pgDb, tableIDs); err != nil {
+	if err := q.databaseSvc.DeleteManyTables(q.ctx, tableIDs); err != nil {
 		return err
 	}
-
-	var schema *models.Schema
-	if err := schema.DeleteMany(pgDb, schemaIDs); err != nil {
+	if err := q.databaseSvc.DeleteManySchemas(q.ctx, schemaIDs); err != nil {
 		return err
 	}
-
-	if err := database.DeleteMany(pgDb, databaseIDs); err != nil {
+	if err := q.databaseSvc.DeleteMany(q.ctx, databaseIDs); err != nil {
 		return err
 	}
 	return nil
 }
 
-func handleDeleteDBResourceTask(task utils.DatabaseTask, pgDb *gorm.DB, monogoClient *mongo.Client) error {
+func (q *Queue) handleDeleteDBResourceTask(task utils.DatabaseTask) error {
 	var (
-		schemaIDs []uint
-		tableIDs  []uint
-		columnIDs []uint
+		schemaIDs []string
+		tableIDs  []string
+		columnIDs []string
 	)
 
-	var schema models.Schema
-	schemas, err := schema.FetchSchemas(pgDb, models.Schema{DatabaseID: task.DatabaseID})
+	schemas, err := q.databaseSvc.ListSchemas(q.ctx, databasePkg.Schema{DatabaseID: task.DatabaseID})
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
 
-	for _, schema := range schemas {
-		schemaIDs = append(schemaIDs, schema.ID)
+	for _, s := range schemas {
+		schemaIDs = append(schemaIDs, s.ID)
 
-		var table models.Table
-		tables, err := table.FetchTables(pgDb, models.Table{SchemaID: schema.ID})
+		tables, err := q.databaseSvc.ListTables(q.ctx, databasePkg.Table{SchemaID: s.ID})
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
 		}
 
-		for _, table := range tables {
-			tableIDs = append(tableIDs, table.ID)
+		for _, t := range tables {
+			tableIDs = append(tableIDs, t.ID)
 
-			var column models.Column
-			columns, err := column.FetchColumns(pgDb, models.Column{TableID: table.ID})
+			columns, err := q.databaseSvc.ListColumns(q.ctx, databasePkg.Column{TableID: t.ID})
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
 
-			for _, column := range columns {
-				columnIDs = append(columnIDs, column.ID)
+			for _, c := range columns {
+				columnIDs = append(columnIDs, c.ID)
 			}
 		}
 	}
 
-	var column *models.Column
-	if err := column.DeleteMany(pgDb, columnIDs); err != nil {
+	if err := q.databaseSvc.DeleteManyColumns(q.ctx, columnIDs); err != nil {
 		return err
 	}
-
-	var table *models.Table
-	if err := table.DeleteMany(pgDb, tableIDs); err != nil {
+	if err := q.databaseSvc.DeleteManyTables(q.ctx, tableIDs); err != nil {
 		return err
 	}
-
-	if err := schema.DeleteMany(pgDb, schemaIDs); err != nil {
+	if err := q.databaseSvc.DeleteManySchemas(q.ctx, schemaIDs); err != nil {
 		return err
 	}
 

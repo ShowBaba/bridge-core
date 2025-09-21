@@ -5,7 +5,8 @@ type ListResult struct {
 	TotalCount int           `json:"totalCount"`
 }
 
-type GraphQLPayload struct {
-	Query     string                 `json:"query"`
-	Variables map[string]interface{} `json:"variables"`
+type Payload struct {
+	Query         string                 `json:"query"`
+	Variables     map[string]interface{} `json:"variables"`
+	OperationName string                 `json:"operationName"`
 }

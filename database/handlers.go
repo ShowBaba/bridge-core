@@ -1,273 +1,118 @@
 package database
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"strconv"
+	"errors"
 
-	"github.com/go-playground/validator"
-	"github.com/gorilla/mux"
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/go-playground/validator/v10"
+	"github.com/gofiber/fiber/v2"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
-var ctx = context.Background()
-
-// re-fetch database information
-func UpdateDatabase(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	userId := r.Context().Value("id").(uint)
-	var input UpdateDatabasePayload
-	if body, err := io.ReadAll(r.Body); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
-		return
-	} else if err := json.Unmarshal(body, &input); err != nil {
-		utils.Dispatch400Error(w, "invalid body: %s")
-		return
-	}
-	validate := validator.New()
-	err := validate.Struct(input)
-	if err != nil {
-		validationErrors := err.(validator.ValidationErrors)
-		utils.Dispatch400Error(w, validationErrors.Error())
-		return
-	}
-	vars := mux.Vars(r)
-	databaseIDStr, ok := vars["database_id"]
-
-	if !ok || databaseIDStr == "" {
-		utils.Dispatch400Error(w, "invalid or missing database ID")
-		return
-	}
-
-	databaseID, err := strconv.Atoi(databaseIDStr)
-	if err != nil {
-		utils.Dispatch400Error(w, "invalid database ID format")
-		return
-	}
-
-	var database *models.Database
-
-	database, exist, err := database.FetchDatabase(db, models.Database{ID: uint(databaseID)})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if !exist {
-		utils.Dispatch404Error(w, "database with id not found")
-		return
-	}
-	var application *models.Application
-	application, exist, err = application.FetchApplication(db, models.Application{ID: database.ApplicationID})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if !exist {
-		utils.Dispatch404Error(w, "cannot find application")
-		return
-	}
-
-	if application.UserID != userId {
-		utils.Dispatch401Error(w, "unauthorized")
-		return
-	}
-
-	if input.Database != "" {
-		if input.Host == "" || input.Host != database.Host {
-			_, exist, err := database.FetchDatabase(db, models.Database{Database: input.Database, Host: database.Host, ApplicationID: database.ApplicationID})
-			if err != nil {
-				utils.Dispatch500Error(w, err.Error())
-				return
-			}
-			if exist {
-				utils.Dispatch400Error(w, "duplicate database name")
-				return
-			}
-		}
-	}
-	// test the connection in case any crucial changes was made
-	if input.Host == "" {
-		input.Host = database.Host
-	}
-	if input.Port == 0 {
-		input.Port = database.Port
-	}
-	if input.Database == "" {
-		input.Database = database.Database
-	}
-	if input.Username == "" {
-		input.Username = database.Username
-	}
-	if input.Password == "" {
-		rawPassword, err := utils.Decrypt(database.Password, []byte(utils.GetConfig().EncryptionKey))
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-		input.Password = string(rawPassword)
-	}
-	if input.DbEngine == "" {
-		input.DbEngine = database.DbEngine
-	}
-	if input.Name == "" {
-		input.Name = database.Name
-	}
-
-	dbConn, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
-		Host:     input.Host,
-		Port:     input.Port,
-		Database: input.Database,
-		Username: input.Username,
-		Password: input.Password,
-		DbEngine: input.DbEngine,
-	})
-	if err != nil {
-		utils.Dispatch400Error(w, fmt.Sprintf("error creating database connection: %v", err))
-		return
-	}
-	// close the database connection
-	dbConn.Close()
-
-	// if password is in update encrypt
-	encryptedPassword, err := utils.Encrypt([]byte(input.Password), []byte(utils.GetConfig().EncryptionKey))
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	err = database.Update(db, map[string]interface{}{
-		"Host":     input.Host,
-		"Port":     input.Port,
-		"Database": input.Database,
-		"Username": input.Username,
-		"Password": encryptedPassword,
-		"DbEngine": input.DbEngine,
-		"Name":     input.Name,
-	})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-
-	// TODO: only need to re-fetch database data if only credentials changed
-	if input.Host != database.Host &&
-		input.Port != database.Port &&
-		input.Database != database.Database &&
-		input.Username != database.Username &&
-		encryptedPassword != database.Password &&
-		input.DbEngine != database.DbEngine {
-		databaseTask := utils.DatabaseTask{
-			DatabaseID: uint(databaseID),
-			UserID:     userId,
-			Action:     utils.FetchDBAction,
-		}
-		payload, err := json.Marshal(databaseTask)
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
-		}
-		if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.DATABASE_QUEUE); err != nil {
-			if err != nil {
-				utils.Dispatch500Error(w, err.Error())
-				return
-			}
-		}
-	}
-	response := utils.APIResponse{
-		Status:  http.StatusOK,
-		Message: "database updated successfully",
-	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	w.Write(responseJSON)
+type Handler struct {
+	svc Service
 }
 
-func DeleteDatabases(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	userId := r.Context().Value("id").(uint)
+func NewHandler(svc Service) *Handler {
+	return &Handler{svc}
+}
 
-	vars := mux.Vars(r)
-	databaseIDStr, ok := vars["database_id"]
-
-	if !ok || databaseIDStr == "" {
-		utils.Dispatch400Error(w, "invalid or missing database ID")
-		return
+func (h *Handler) update(c *fiber.Ctx) error {
+	var input UpdateDatabasePayload
+	if err := c.BodyParser(&input); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
+	}
+	v := validator.New()
+	if err := v.Struct(input); err != nil {
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			return utils.Dispatch400Error(c, ve.Error())
+		}
+		return utils.Dispatch400Error(c, "invalid payload")
 	}
 
-	databaseID, err := strconv.Atoi(databaseIDStr)
-	if err != nil {
-		utils.Dispatch400Error(w, "invalid database ID format")
-		return
+	dbID := c.Params("database_id")
+	if dbID == "" {
+		return utils.Dispatch400Error(c, "invalid or missing database ID")
+	}
+	uid, _ := c.Locals("id").(string)
+	if uid == "" {
+		return utils.Dispatch401Error(c, "unauthorized")
 	}
 
-	var database *models.Database
-
-	database, exist, err := database.FetchDatabase(db, models.Database{ID: uint(databaseID)})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if !exist {
-		utils.Dispatch404Error(w, "database with id not found")
-		return
-	}
-
-	var application *models.Application
-	application, exist, err = application.FetchApplication(db, models.Application{ID: database.ApplicationID, UserID: userId})
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-
-	if !exist {
-		utils.Dispatch404Error(w, "cannot find application")
-		return
-	}
-
-	if application.UserID != userId {
-		utils.Dispatch401Error(w, "unauthorized")
-		return
-	}
-
-	// delete other associating resources
-	databaseTask := utils.DatabaseTask{
-		DatabaseID: database.ID,
-		UserID:     userId,
-		Action:     utils.DeleteDBResourceAction,
-	}
-	payload, err := json.Marshal(databaseTask)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	if err := utils.PublishMessageToQueue(ctx, queueConnection, payload, utils.DATABASE_QUEUE); err != nil {
-		if err != nil {
-			utils.Dispatch500Error(w, err.Error())
-			return
+	if err := h.svc.update(c.UserContext(), uid, dbID, input); err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			return utils.Dispatch404Error(c, "database or application not found")
+		case errors.Is(err, ErrUnauthorized):
+			return utils.Dispatch401Error(c, "unauthorized")
+		case errors.Is(err, ErrDuplicateDBName):
+			return utils.Dispatch400Error(c, "duplicate database name")
+		default:
+			return utils.Dispatch500Error(c, err)
 		}
 	}
 
-	if err := database.Delete(db, &models.Database{ID: database.ID}); err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
+	return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "database updated successfully",
+	})
+}
+
+func (h *Handler) delete(c *fiber.Ctx) error {
+	dbID := c.Params("database_id")
+	if dbID == "" {
+		return utils.Dispatch400Error(c, "invalid or missing database ID")
+	}
+	uid, _ := c.Locals("id").(string)
+	if uid == "" {
+		return utils.Dispatch401Error(c, "unauthorized")
 	}
 
-	response := utils.APIResponse{
-		Status:  http.StatusOK,
+	if err := h.svc.delete(c.UserContext(), uid, dbID); err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			return utils.Dispatch404Error(c, "database or application not found")
+		case errors.Is(err, ErrUnauthorized):
+			return utils.Dispatch401Error(c, "unauthorized")
+		default:
+			return utils.Dispatch500Error(c, err)
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+		Status:  fiber.StatusOK,
 		Message: "database deleted successfully",
+	})
+}
+
+func (h *Handler) add(c *fiber.Ctx) error {
+	var input AddDatabasePayload
+	if err := c.BodyParser(&input); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
 	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
+	v := validator.New()
+	if err := v.Struct(input); err != nil {
+		return utils.Dispatch400Error(c, err.(validator.ValidationErrors).Error())
 	}
-	w.Write(responseJSON)
+	appID := c.Params("application_id")
+	if appID == "" {
+		return utils.Dispatch400Error(c, "missing application_id in request")
+	}
+	uid, ok := c.Locals("id").(string)
+	if !ok || uid == "" {
+		return utils.Dispatch400Error(c, "missing user id")
+	}
+	if err := h.svc.add(c.UserContext(), uid, appID, input); err != nil {
+		if errors.Is(err, ErrDuplicateDBName) {
+			return utils.Dispatch400Error(c, "duplicate database name")
+		}
+		if errors.Is(err, ErrNotFound) {
+			return utils.Dispatch404Error(c, "cannot find application")
+		}
+		return utils.Dispatch500Error(c, err)
+	}
+	return c.Status(fiber.StatusCreated).JSON(utils.APIResponse{
+		Status:  fiber.StatusCreated,
+		Message: "database created successfully",
+	})
 }

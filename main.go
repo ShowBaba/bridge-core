@@ -3,18 +3,22 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"github.com/showbaba/query-bridge/bridge-core/queues"
-	"golang.org/x/sync/errgroup"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
+	"github.com/apitoolkit/apitoolkit-go"
+	"github.com/showbaba/query-bridge/bridge-core/audit"
+	logPkg "github.com/showbaba/query-bridge/bridge-core/database-log"
+	"github.com/showbaba/query-bridge/bridge-core/queues"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/graphql-go/graphql"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/showbaba/query-bridge/bridge-core/application"
@@ -54,13 +58,18 @@ func main() {
 		log.Fatal(fmt.Errorf(`error creating pg database connection; %v`, err))
 	}
 
-	mongoClient, err = db.ConnectToMongoDB(ctx, utils.GetConfig().MongoURI)
+	mongoClient, err = db.ConnectToMongoDB(context.Background(), utils.GetConfig().MongoURI)
 	if err != nil {
 		log.Fatal(fmt.Errorf(`error creating mongo database connection; %v`, err))
 	}
 
 	g.Go(func() error {
-		if err := queues.InitDBQueue(dbClient, mongoClient, qConn); err != nil {
+		auditSvc := audit.NewService(audit.NewRepository(dbClient))
+		applicationSvc := application.NewService(application.NewRepository(dbClient), qConn, auditSvc)
+		databaseSvc := database.NewService(database.NewRepository(dbClient), applicationSvc, auditSvc, qConn)
+		endpointSvc := endpoint.NewService(endpoint.NewRepository(dbClient), applicationSvc, databaseSvc, auditSvc)
+		logSvc := logPkg.NewService(logPkg.NewRepository(mongoClient))
+		if err := queues.NewQueue(dbClient, mongoClient, qConn, databaseSvc, endpointSvc, logSvc); err != nil {
 			return fmt.Errorf(`error initializing database queue; %v`, err)
 		}
 		return nil
@@ -82,14 +91,45 @@ func main() {
 		if err != nil {
 			return fmt.Errorf(`error creating schema; %v`, err)
 		}
-		router := mux.NewRouter()
-		InitializeRoutes(ctx, router, dbClient, qConn, mongoClient, schema)
+
+		app := fiber.New()
+		app.Use(logger.New())
+		app.Use(func(c *fiber.Ctx) error {
+			ctx := utils.ContextWithIP(c.UserContext(), c.IP())
+			c.SetUserContext(ctx)
+			return c.Next()
+		})
+		corsSettings := cors.New(cors.Config{
+			AllowOriginsFunc: func(origin string) bool {
+				return true
+			}, AllowMethods: "GET,POST,HEAD,PUT,DELETE,PATCH",
+			AllowHeaders:     "Origin, Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With",
+			ExposeHeaders:    "Origin",
+			AllowCredentials: true,
+		})
+		app.Use(corsSettings)
+
+		apitoolkitCfg := apitoolkit.Config{
+			RedactHeaders:     []string{"Content-Type", "Authorization", "Bearer"},
+			RedactRequestBody: []string{"$.password"},
+			APIKey:            utils.GetConfig().APIToolKitAPIKey,
+		}
+		apitoolkitClient, err := apitoolkit.NewClient(context.Background(), apitoolkitCfg)
+		if err != nil {
+			return fmt.Errorf(`fail to initialize api tool kit; %v`, err)
+		}
+		app.Use(func(c *fiber.Ctx) error {
+			return apitoolkitClient.FiberMiddleware(c)
+		})
+
+		InitializeRoutes(context.Background(), app, dbClient, qConn, mongoClient, schema)
+
 		port := utils.GetConfig().Port
 		if port == "" {
 			port = "8080"
 		}
 		log.Printf("starting server on port: %s", port)
-		if err := Run(router, fmt.Sprintf(`:%s`, port)); err != nil {
+		if err := app.Listen(fmt.Sprintf(":%s", port)); err != nil {
 			return fmt.Errorf(`fail to start server; %v`, err)
 		}
 		return nil
@@ -132,59 +172,27 @@ func main() {
 	log.Println("Server and database connections closed. Goodbye!")
 }
 
-func InitializeRoutes(ctx context.Context, router *mux.Router, dbCl *gorm.DB, qConnection *amqp091.Connection,
+func InitializeRoutes(ctx context.Context, app *fiber.App, dbCl *gorm.DB, qConnection *amqp091.Connection,
 	mongoClient *mongo.Client, gqlSchema graphql.Schema) {
-	// graphql route
-	router.HandleFunc("/gql", func(w http.ResponseWriter, r *http.Request) {
-		gql.RunGQL(w, r, gqlSchema, ctx)
-	}).Methods("POST", "OPTIONS")
 
-	// log stream route
-	router.HandleFunc("/stream", func(w http.ResponseWriter, r *http.Request) {
-		websocket.StreamHandler(w, r, ctx, mongoClient)
+	app.Options("/gql", func(c *fiber.Ctx) error { return c.SendStatus(fiber.StatusNoContent) })
+	app.Post("/gql", func(c *fiber.Ctx) error {
+		return gql.RunGQL(c, gqlSchema, ctx)
 	})
 
-	router.HandleFunc("/ping", ping).Methods("GET")
+	app.Use("/stream", websocket.StreamHandler(ctx, mongoClient))
 
-	authRoutes := router.PathPrefix("/auth").Subrouter()
-	auth.InitializeAuthRoutes(authRoutes, dbCl)
+	app.Get("/ping", func(c *fiber.Ctx) error {
+		response := utils.APIResponse{
+			Status:  http.StatusOK,
+			Message: "bridge says pong!",
+		}
+		return c.JSON(response)
+	})
 
-	userRoutes := router.PathPrefix("/user").Subrouter()
-	user.InitializeUserRoutes(userRoutes, dbCl, qConnection)
-
-	applicationRoutes := router.PathPrefix("/application").Subrouter()
-	application.InitializeApplicationRoutes(applicationRoutes, dbCl, qConnection)
-
-	databaseRoutes := router.PathPrefix("/database").Subrouter()
-	database.InitializeApplicationRoutes(databaseRoutes, dbCl, qConnection)
-
-	endpointRoutes := router.PathPrefix("/endpoint").Subrouter()
-	endpoint.InitializeEndpointRoutes(endpointRoutes, dbCl, mongoClient)
-}
-
-func Run(r *mux.Router, host string) error {
-	return http.ListenAndServe(
-		host,
-		handlers.CORS(
-			handlers.AllowCredentials(),
-			handlers.AllowedMethods([]string{"POST", "GET", "PUT", "OPTIONS", "DELETE", "PATCH"}),
-			handlers.AllowedHeaders([]string{"Authorization", "Content-Type"}),
-			handlers.MaxAge(3600),
-		)(r),
-	)
-}
-
-func ping(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/json")
-	response := utils.APIResponse{
-		Status:  http.StatusOK,
-		Message: "bridge says pong!",
-	}
-	responseJSON, err := json.Marshal(response)
-	if err != nil {
-		utils.Dispatch500Error(w, err.Error())
-		return
-	}
-	w.Write(responseJSON)
+	auth.InitializeAuthRoutes(app, dbCl, qConnection)
+	user.InitializeUserRoutes(app, dbCl, qConnection)
+	application.InitializeApplicationRoutes(app, dbCl, qConnection)
+	database.InitializeDatabaseRoutes(app, dbCl, qConnection)
+	endpoint.InitializeEndpointRoutes(app, dbCl, qConnection)
 }

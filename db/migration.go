@@ -1,27 +1,32 @@
 package db
 
 import (
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/application"
+	"github.com/showbaba/query-bridge/bridge-core/audit"
+	"github.com/showbaba/query-bridge/bridge-core/database"
+	"github.com/showbaba/query-bridge/bridge-core/endpoint"
+	"github.com/showbaba/query-bridge/bridge-core/user"
 	"gorm.io/gorm"
 )
 
 func Migrate(db *gorm.DB) error {
 	err := db.AutoMigrate(
-	// &models.Application{},
-	// &models.User{},
-	// &models.Database{},
-	// &models.Schema{},
-	// &models.Table{},
-	// &models.Column{},
-	// &models.Endpoint{},
+		&application.Application{},
+		&user.User{},
+		&database.Database{},
+		&database.Schema{},
+		&database.Table{},
+		&database.Column{},
+		&endpoint.Endpoint{},
+		&audit.Audit{},
 	)
 
-	db.Model(&models.Application{}).Association("UserID")
-	db.Model(&models.Database{}).Association("ApplicationID")
-	db.Model(&models.Schema{}).Association("DatabaseID")
-	db.Model(&models.Table{}).Association("SchemaID")
-	db.Model(&models.Column{}).Association("TableID")
-	db.Model(&models.Endpoint{}).Association("TableID")
+	db.Model(&application.Application{}).Association("UserID")
+	db.Model(&database.Database{}).Association("ApplicationID")
+	db.Model(&database.Schema{}).Association("DatabaseID")
+	db.Model(&database.Table{}).Association("SchemaID")
+	db.Model(&database.Column{}).Association("TableID")
+	db.Model(&endpoint.Endpoint{}).Association("TableID")
 
 	if err != nil {
 		return err

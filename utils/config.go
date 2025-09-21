@@ -30,6 +30,7 @@ type Config struct {
 	EncryptionKey           string
 	MongoURI                string
 	ServerBaseURL           string
+	APIToolKitAPIKey        string
 }
 
 func GetConfig() Config {
@@ -58,6 +59,7 @@ func defaultConfig() *Config {
 		EncryptionKey:           os.Getenv("ENCRYPTION_KEY"),
 		MongoURI:                os.Getenv("MONGO_URI"),
 		ServerBaseURL:           os.Getenv("SERVER_BASE_URL"),
+		APIToolKitAPIKey:        os.Getenv("APITOOLKIT_APIKEY"),
 	}
 }
 

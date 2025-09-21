@@ -5,7 +5,11 @@ import (
 	"log"
 
 	"github.com/graphql-go/graphql"
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	"github.com/showbaba/query-bridge/bridge-core/application"
+	"github.com/showbaba/query-bridge/bridge-core/audit"
+	"github.com/showbaba/query-bridge/bridge-core/database"
+	"github.com/showbaba/query-bridge/bridge-core/endpoint"
+	"github.com/showbaba/query-bridge/bridge-core/user"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 	"gorm.io/gorm"
 )
@@ -17,16 +21,16 @@ func Init(db *gorm.DB) *graphql.Object {
 			"users": makeListField(
 				makeNodeListType("UserList", UserType),
 				func(params graphql.ResolveParams) (interface{}, error) {
-					userID, ok := params.Context.Value("id").(uint)
+					userID, ok := params.Context.Value("id").(string)
 					if !ok {
 						return nil, errors.New("unauthorized access")
 					}
 					var (
 						list  ListResult
 						tx    *gorm.DB
-						users []models.User
+						users []user.User
 					)
-					tx = parseDbClause(params, db.Model(&models.User{}), UserType)
+					tx = parseDbClause(params, db.Model(&user.User{}), UserType)
 					tx = tx.Where("id = ?", userID)
 					res := tx.Debug().Scan(&users)
 					if res.RowsAffected > 0 {
@@ -42,16 +46,16 @@ func Init(db *gorm.DB) *graphql.Object {
 			"applications": makeListField(
 				makeNodeListType("ApplicationList", ApplicationType),
 				func(params graphql.ResolveParams) (interface{}, error) {
-					userID, ok := params.Context.Value("id").(uint)
+					userID, ok := params.Context.Value("id").(string)
 					if !ok {
 						return nil, errors.New("unauthorized access")
 					}
 					var (
 						list         ListResult
 						tx           *gorm.DB
-						applications []models.Application
+						applications []application.Application
 					)
-					tx = db.Model(&models.Application{})
+					tx = db.Model(&application.Application{})
 					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, ApplicationType)
 					res := tx.Debug().Scan(&applications)
@@ -76,16 +80,16 @@ func Init(db *gorm.DB) *graphql.Object {
 			"databases": makeListField(
 				makeNodeListType("DatabaseList", DatabaseType),
 				func(params graphql.ResolveParams) (interface{}, error) {
-					userID, ok := params.Context.Value("id").(uint)
+					userID, ok := params.Context.Value("id").(string)
 					if !ok {
 						return nil, errors.New("unauthorized access")
 					}
 					var (
 						list      ListResult
 						tx        *gorm.DB
-						databases []models.Database
+						databases []database.Database
 					)
-					tx = db.Model(&models.Database{})
+					tx = db.Model(&database.Database{})
 					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, DatabaseType)
 					res := tx.Debug().Scan(&databases)
@@ -105,16 +109,16 @@ func Init(db *gorm.DB) *graphql.Object {
 			"columns": makeListField(
 				makeNodeListType("ColumnList", ColumnType),
 				func(params graphql.ResolveParams) (interface{}, error) {
-					userID, ok := params.Context.Value("id").(uint)
+					userID, ok := params.Context.Value("id").(string)
 					if !ok {
 						return nil, errors.New("unauthorized access")
 					}
 					var (
 						list    ListResult
 						tx      *gorm.DB
-						columns []models.Column
+						columns []database.Column
 					)
-					tx = db.Model(&models.Column{})
+					tx = db.Model(&database.Column{})
 					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, ColumnType)
 					res := tx.Debug().Scan(&columns)
@@ -131,16 +135,16 @@ func Init(db *gorm.DB) *graphql.Object {
 			"endpoints": makeListField(
 				makeNodeListType("EndpointList", EndpointType),
 				func(params graphql.ResolveParams) (interface{}, error) {
-					userID, ok := params.Context.Value("id").(uint)
+					userID, ok := params.Context.Value("id").(string)
 					if !ok {
 						return nil, errors.New("unauthorized access")
 					}
 					var (
 						list      ListResult
 						tx        *gorm.DB
-						endpoints []models.Endpoint
+						endpoints []endpoint.Endpoint
 					)
-					tx = db.Model(&models.Endpoint{})
+					tx = db.Model(&endpoint.Endpoint{})
 					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, EndpointType)
 					res := tx.Debug().Scan(&endpoints)
@@ -157,16 +161,16 @@ func Init(db *gorm.DB) *graphql.Object {
 			"schemas": makeListField(
 				makeNodeListType("SchemaList", SchemaType),
 				func(params graphql.ResolveParams) (interface{}, error) {
-					userID, ok := params.Context.Value("id").(uint)
+					userID, ok := params.Context.Value("id").(string)
 					if !ok {
 						return nil, errors.New("unauthorized access")
 					}
 					var (
 						list    ListResult
 						tx      *gorm.DB
-						schemas []models.Schema
+						schemas []database.Schema
 					)
-					tx = db.Model(&models.Schema{})
+					tx = db.Model(&database.Schema{})
 					tx = tx.Where("user_id = ?", userID)
 
 					tx = parseDbClause(params, tx, SchemaType)
@@ -184,22 +188,48 @@ func Init(db *gorm.DB) *graphql.Object {
 			"tables": makeListField(
 				makeNodeListType("TableList", TableType),
 				func(params graphql.ResolveParams) (interface{}, error) {
-					userID, ok := params.Context.Value("id").(uint)
+					userID, ok := params.Context.Value("id").(string)
 					if !ok {
 						return nil, errors.New("unauthorized access")
 					}
 					var (
 						list   ListResult
 						tx     *gorm.DB
-						tables []models.Table
+						tables []database.Table
 					)
-					tx = db.Model(&models.Table{})
+					tx = db.Model(&database.Table{})
 					tx = tx.Where("user_id = ?", userID)
 					tx = parseDbClause(params, tx, TableType)
 					res := tx.Debug().Scan(&tables)
 					if res.RowsAffected > 0 {
 						list.Nodes = []interface{}{}
 						for _, u := range tables {
+							list.Nodes = append(list.Nodes, interface{}(u))
+						}
+						list.TotalCount = len(list.Nodes)
+					}
+					return list, nil
+				},
+			),
+			"audits": makeListField( // todo: make application_id required instead
+				makeNodeListType("AuditList", AuditType),
+				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(string)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
+					var (
+						list   ListResult
+						tx     *gorm.DB
+						audits []audit.Audit
+					)
+					tx = db.Model(&audit.Audit{})
+					tx = tx.Where("user_id = ?", userID)
+					tx = parseDbClause(params, tx, AuditType)
+					res := tx.Debug().Scan(&audits)
+					if res.RowsAffected > 0 {
+						list.Nodes = []interface{}{}
+						for _, u := range audits {
 							list.Nodes = append(list.Nodes, interface{}(u))
 						}
 						list.TotalCount = len(list.Nodes)

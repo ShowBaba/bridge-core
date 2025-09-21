@@ -1,33 +1,33 @@
 package queues
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
-	"github.com/showbaba/query-bridge/bridge-core/models"
+	"strings"
+
+	"github.com/google/uuid"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
-	"go.mongodb.org/mongo-driver/mongo"
 	"gorm.io/gorm"
 )
 
-func FetchDatabaseInfo(db *sql.DB, sqlLogCh chan<- string, result chan<- utils.SchemaData, errCh chan<- error) {
+func fetchDatabaseInfo(db *sql.DB, sqlLogCh chan<- string, result chan<- utils.SchemaData, errCh chan<- error) {
 	var err error
 
-	schemas, err := FetchSchemas(db, sqlLogCh)
+	schemas, err := fetchSchemas(db, sqlLogCh)
 	if err != nil {
 		errCh <- fmt.Errorf("failed to fetch schemas: %v", err)
 		return
 	}
 	// var tables []string
 	for _, schema := range schemas {
-		tables, err := FetchTables(db, schema, sqlLogCh)
+		tables, err := fetchTables(db, schema, sqlLogCh)
 		if err != nil {
 			errCh <- err
 			continue
 		}
 		var tableData []utils.TableData
 		for _, table := range tables {
-			columns, err := FetchColumns(db, schema, table, sqlLogCh)
+			columns, err := fetchColumns(db, schema, table, sqlLogCh)
 			if err != nil {
 				errCh <- err
 				continue
@@ -38,7 +38,7 @@ func FetchDatabaseInfo(db *sql.DB, sqlLogCh chan<- string, result chan<- utils.S
 	}
 }
 
-func FetchSchemas(db *sql.DB, sqlLogCh chan<- string) ([]string, error) {
+func fetchSchemas(db *sql.DB, sqlLogCh chan<- string) ([]string, error) {
 	var schemas []string
 
 	query := "SELECT schema_name FROM information_schema.schemata WHERE schema_name NOT LIKE 'pg_%' AND schema_name != 'information_schema'"
@@ -61,7 +61,7 @@ func FetchSchemas(db *sql.DB, sqlLogCh chan<- string) ([]string, error) {
 	return schemas, nil
 }
 
-func FetchTables(db *sql.DB, schema string, sqlLogCh chan<- string) ([]string, error) {
+func fetchTables(db *sql.DB, schema string, sqlLogCh chan<- string) ([]string, error) {
 	var tables []string
 
 	query := fmt.Sprintf("SELECT table_name FROM information_schema.tables WHERE table_schema = '%s'", schema)
@@ -86,7 +86,7 @@ func FetchTables(db *sql.DB, schema string, sqlLogCh chan<- string) ([]string, e
 	return tables, nil
 }
 
-func FetchColumns(db *sql.DB, schema, tableName string, sqlLogCh chan<- string) ([]string, error) {
+func fetchColumns(db *sql.DB, schema, tableName string, sqlLogCh chan<- string) ([]string, error) {
 	var columns []string
 
 	query := fmt.Sprintf(`SELECT column_name FROM information_schema.columns WHERE table_schema = '%s' AND table_name = '%s' AND column_name NOT LIKE 'pg_%%' AND column_name NOT LIKE 'sys_%%'`, schema, tableName)
@@ -110,89 +110,57 @@ func FetchColumns(db *sql.DB, schema, tableName string, sqlLogCh chan<- string) 
 	return columns, nil
 }
 
-func LogSqlQuery(ctx context.Context, mongoClient *mongo.Client, applicationID uint, userID uint, ch <-chan string, errCh chan<- error) {
-	for logData := range ch {
-		var stream *models.StreamLog
-		err := stream.Insert(ctx, mongoClient, logData, applicationID, userID)
-		if err != nil {
-			errCh <- err
-		}
-	}
-}
-
-func StoreData(db *gorm.DB, dbID, userID uint, ch <-chan utils.SchemaData, errCh chan<- error) {
+func storeData(db *gorm.DB, dbID, userID string, ch <-chan utils.SchemaData, errCh chan<- error) {
 	for data := range ch {
-		schema := &models.Schema{
-			DatabaseID: dbID,
-			Name:       data.Schema,
-			UserID:     userID,
-		}
-		var schemaID uint
-		existingSchema, exist, err := schema.FetchSchemaByNameAndDatabaseID(db)
+		var schemaID string
+		err := db.Raw(`SELECT id FROM schemas WHERE name = ? AND database_id = ? AND deleted_at IS NULL LIMIT 1`, data.Schema, dbID).Scan(&schemaID).Error
 		if err != nil {
 			errCh <- err
 			continue
 		}
-		if exist {
-			err = schema.Update(db, *schema)
-			if err != nil {
+		if schemaID != "" {
+			if err := db.Exec(`UPDATE schemas SET name = ?, updated_at = NOW() WHERE id = ?`, data.Schema, schemaID).Error; err != nil {
 				errCh <- err
 				continue
 			}
-			schemaID = existingSchema.ID
 		} else {
-			schemaID, err = schema.Insert(db)
-			if err != nil {
+			if err := db.Raw(`INSERT INTO schemas (id, database_id, name, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW()) RETURNING id`, strings.ReplaceAll(uuid.New().String(), "-", ""), dbID, data.Schema, userID).Scan(&schemaID).Error; err != nil {
 				errCh <- err
 				continue
 			}
 		}
 		for _, tableData := range data.Tables {
-			table := &models.Table{
-				SchemaID:   schemaID,
-				Name:       tableData.Table,
-				DatabaseID: dbID,
-				UserID:     userID,
-			}
-			var tableID uint
-			existingTable, exist, err := table.FetchTableByNameAndSchemaID(db)
+			var tableID string
+			err := db.Raw(`SELECT id FROM tables WHERE name = ? AND schema_id = ? AND deleted_at IS NULL LIMIT 1`, tableData.Table, schemaID).Scan(&tableID).Error
 			if err != nil {
 				errCh <- err
 				continue
 			}
-			if exist {
-				err = table.Update(db, *table)
-				if err != nil {
+			if tableID != "" {
+				if err := db.Exec(`UPDATE tables SET name = ?, updated_at = NOW() WHERE id = ?`, tableData.Table, tableID).Error; err != nil {
 					errCh <- err
 					continue
 				}
-				tableID = existingTable.ID
 			} else {
-				tableID, err = table.Insert(db)
-				if err != nil {
+				if err := db.Raw(`INSERT INTO tables (id, schema_id, name, database_id, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW()) RETURNING id`, strings.ReplaceAll(uuid.New().String(), "-", ""), schemaID, tableData.Table, dbID, userID).Scan(&tableID).Error; err != nil {
 					errCh <- err
+					continue
 				}
 			}
-
-			for _, column := range tableData.Columns {
-				column := &models.Column{
-					TableID: tableID,
-					Name:    column,
-					UserID:  userID,
-				}
-				_, exist, err := column.FetchColumnByNameAndTableID(db)
+			for _, col := range tableData.Columns {
+				var colID string
+				err := db.Raw(`SELECT id FROM columns WHERE name = ? AND table_id = ? AND deleted_at IS NULL LIMIT 1`, col, tableID).Scan(&colID).Error
 				if err != nil {
 					errCh <- err
 					continue
 				}
-				if exist {
-					err = column.Update(db, *column)
-					if err != nil {
+				if colID != "" {
+					if err := db.Exec(`UPDATE columns SET name = ?, updated_at = NOW() WHERE id = ?`, col, colID).Error; err != nil {
 						errCh <- err
 						continue
 					}
 				} else {
-					if err := column.Insert(db); err != nil {
+					if err := db.Exec(`INSERT INTO columns (id, table_id, name, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, NOW(), NOW())`, strings.ReplaceAll(uuid.New().String(), "-", ""), tableID, col, userID).Error; err != nil {
 						errCh <- err
 					}
 				}
