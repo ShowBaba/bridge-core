@@ -14,6 +14,7 @@ func Migrate(db *gorm.DB) error {
 		&application.Application{},
 		&user.User{},
 		&database.Database{},
+		&database.Index{},
 		&database.Schema{},
 		&database.Table{},
 		&database.Column{},

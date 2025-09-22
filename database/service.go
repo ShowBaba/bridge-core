@@ -345,6 +345,7 @@ func (s *service) add(ctx context.Context, userID, appID string, payload AddData
 		Database:      payload.Database,
 		Host:          payload.Host,
 		ApplicationID: appID,
+		Name:          payload.Name,
 	}); err != nil {
 		return err
 	} else if dup {

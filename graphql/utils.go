@@ -43,6 +43,8 @@ func makeListField(listType graphql.Output, resolve graphql.FieldResolveFn) *gra
 		fields = DatabaseType.Fields()
 	case "ColumnList":
 		fields = ColumnType.Fields()
+	case "IndexType":
+		fields = ColumnType.Fields()
 	case "EndpointList":
 		fields = EndpointType.Fields()
 	case "SchemaList":

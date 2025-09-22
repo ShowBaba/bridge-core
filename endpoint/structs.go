@@ -10,6 +10,7 @@ import (
 type CreateEndpointInput struct {
 	Name           string   `json:"name"  validate:"required"`
 	ApplicationID  string   `json:"application_id"  validate:"required"`
+	DatabaseID     string   `json:"database_id"  validate:"required"`
 	TableID        string   `json:"table_id"  validate:"required"`
 	Method         string   `json:"method"  validate:"required"`
 	Columns        []string `json:"columns"`

@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/apitoolkit/apitoolkit-go"
 	"github.com/showbaba/query-bridge/bridge-core/audit"
 	logPkg "github.com/showbaba/query-bridge/bridge-core/database-log"
 	"github.com/showbaba/query-bridge/bridge-core/queues"
@@ -76,6 +75,7 @@ func main() {
 	})
 
 	g.Go(func() error {
+		fmt.Println("initializing notification queue...")
 		if err := notification.InitNotificationQueue(qConn); err != nil {
 			return fmt.Errorf(`err initilizing notification queue; %v`, err)
 		}
@@ -83,6 +83,7 @@ func main() {
 	})
 
 	g.Go(func() error {
+		fmt.Println("initializing websocket queue...")
 		schema, err := graphql.NewSchema(
 			graphql.SchemaConfig{
 				Query: gql.Init(dbClient),
@@ -109,21 +110,21 @@ func main() {
 		})
 		app.Use(corsSettings)
 
-		apitoolkitCfg := apitoolkit.Config{
-			RedactHeaders:     []string{"Content-Type", "Authorization", "Bearer"},
-			RedactRequestBody: []string{"$.password"},
-			APIKey:            utils.GetConfig().APIToolKitAPIKey,
-		}
-		apitoolkitClient, err := apitoolkit.NewClient(context.Background(), apitoolkitCfg)
-		if err != nil {
-			return fmt.Errorf(`fail to initialize api tool kit; %v`, err)
-		}
-		app.Use(func(c *fiber.Ctx) error {
-			return apitoolkitClient.FiberMiddleware(c)
-		})
+		// apitoolkitCfg := apitoolkit.Config{
+		// 	RedactHeaders:     []string{"Content-Type", "Authorization", "Bearer"},
+		// 	RedactRequestBody: []string{"$.password"},
+		// 	APIKey:            utils.GetConfig().APIToolKitAPIKey,
+		// }
+		// apitoolkitClient, err := apitoolkit.NewClient(context.Background(), apitoolkitCfg)
+		// if err != nil {
+		// 	return fmt.Errorf(`fail to initialize api tool kit; %v`, err)
+		// }
+		// app.Use(func(c *fiber.Ctx) error {
+		// 	return apitoolkitClient.FiberMiddleware(c)
+		// })
 
 		InitializeRoutes(context.Background(), app, dbClient, qConn, mongoClient, schema)
-
+		fmt.Println("starting server ....")
 		port := utils.GetConfig().Port
 		if port == "" {
 			port = "8080"

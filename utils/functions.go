@@ -102,11 +102,26 @@ func WriteInfo(format string, args ...interface{}) []byte {
 
 func TestDatabaseConnection(payload DatabaseConnectionPayload) (*sql.DB, error) {
 	var dsn string
+
 	switch payload.DbEngine {
 	case "mysql":
-		dsn = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", payload.Username, payload.Password, payload.Host, payload.Port, payload.Database)
+		dsn = fmt.Sprintf(
+			"%s:%s@tcp(%s:%d)/%s",
+			payload.Username, payload.Password,
+			payload.Host, payload.Port,
+			payload.Database,
+		)
 	case "postgres":
-		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", payload.Host, payload.Port, payload.Username, payload.Password, payload.Database)
+		sslmode := payload.SSLMode
+		if sslmode == "" {
+			sslmode = "require"
+		}
+		dsn = fmt.Sprintf(
+			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			payload.Host, payload.Port,
+			payload.Username, payload.Password,
+			payload.Database, sslmode,
+		)
 	default:
 		return nil, fmt.Errorf("unsupported database engine: %s", payload.DbEngine)
 	}
@@ -116,8 +131,7 @@ func TestDatabaseConnection(payload DatabaseConnectionPayload) (*sql.DB, error) 
 		return nil, fmt.Errorf("failed to connect to the database: %v", err)
 	}
 
-	err = db.Ping()
-	if err != nil {
+	if err = db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping the database: %v", err)
 	}
 

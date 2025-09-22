@@ -17,9 +17,13 @@ func InitializeEndpointRoutes(app fiber.Router, db *gorm.DB, qC *amqp091.Connect
 	svc := NewService(repo, applicationSvc, databaseSvc, audit.NewService(audit.NewRepository(db)))
 	h := NewHandler(svc)
 
-	r := app.Group("/endpoint", utils.ValidateAuthHeaderToken())
+	r := app.Group("/endpoint")
 
-	r.Post("/:database_id/create", h.create)
 	r.Post("/execute/:identifier", h.execute)
-	r.Patch("/:endpoint_id/update", h.update)
+
+	rAuth := r.Group("")
+	rAuth.Use(utils.ValidateAuthHeaderToken())
+	rAuth.Post("/create", h.create)
+	rAuth.Patch("/:endpoint_id/update", h.update)
+
 }

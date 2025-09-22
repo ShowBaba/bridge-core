@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -29,7 +30,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 		}
 		return utils.Dispatch400Error(c, "invalid payload")
 	}
-	dbID := c.Params("database_id")
+	dbID := in.DatabaseID
 	if dbID == "" {
 		return utils.Dispatch400Error(c, "missing database_id in request")
 	}
@@ -62,6 +63,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 }
 
 func (h *Handler) execute(c *fiber.Ctx) error {
+	fmt.Println("Executing endpoint...")
 	var in ExecuteEndpointInput
 	if err := c.BodyParser(&in); err != nil {
 		return utils.Dispatch400Error(c, "invalid body")
@@ -78,11 +80,8 @@ func (h *Handler) execute(c *fiber.Ctx) error {
 	if id == "" {
 		return utils.Dispatch400Error(c, "missing identifier in request")
 	}
-	uid, _ := c.Locals("id").(string)
-	if uid == "" {
-		return utils.Dispatch401Error(c, "unauthorized")
-	}
-	data, err := h.svc.execute(c, uid, id, in)
+
+	data, err := h.svc.execute(c, id, in)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrInvalidAPIKey):

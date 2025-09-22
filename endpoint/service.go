@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
@@ -27,7 +28,7 @@ var (
 
 type Service interface {
 	create(ctx context.Context, userID, databaseID string, in CreateEndpointInput) (string, error)
-	execute(ctx *fiber.Ctx, userID, identifier string, in ExecuteEndpointInput) (interface{}, error)
+	execute(ctx *fiber.Ctx, identifier string, in ExecuteEndpointInput) (interface{}, error)
 	update(ctx context.Context, userID, endpointID string, in UpdateEndpointInput) (string, error)
 	List(ctx context.Context, filter Endpoint, opts utils.ListOpts) ([]Endpoint, error)
 	DeleteMany(ctx context.Context, ids []string) error
@@ -185,8 +186,8 @@ func (s *service) create(ctx context.Context, userID, databaseID string, in Crea
 	return url, nil
 }
 
-func (s *service) execute(ctx *fiber.Ctx, userID, identifier string, in ExecuteEndpointInput) (interface{}, error) {
-	e, ok, err := s.repo.get(ctx.UserContext(), Endpoint{IdentifierUUID: identifier, UserID: userID})
+func (s *service) execute(ctx *fiber.Ctx, identifier string, in ExecuteEndpointInput) (interface{}, error) {
+	e, ok, err := s.repo.get(ctx.UserContext(), Endpoint{IdentifierUUID: identifier})
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +195,7 @@ func (s *service) execute(ctx *fiber.Ctx, userID, identifier string, in ExecuteE
 		return nil, ErrNotFound
 	}
 
-	app, err := s.applicationSvc.Get(ctx.UserContext(), &application.Application{ID: e.ApplicationID, UserID: userID})
+	app, err := s.applicationSvc.Get(ctx.UserContext(), &application.Application{ID: e.ApplicationID})
 	if err != nil {
 		return nil, err
 	}
@@ -243,39 +244,69 @@ func (s *service) execute(ctx *fiber.Ctx, userID, identifier string, in ExecuteE
 		if err := executeInsertQuery(conn, e.Query, in.Values); err != nil {
 			return nil, fmt.Errorf("failed to execute query: %w", err)
 		}
-		_, _ = s.auditSvc.Create(ctx.UserContext(), audit.LogInput{
-			UserID:      userID,
-			Action:      "execute",
-			EntityType:  "endpoint",
-			EntityID:    e.ID,
-			Description: "executed endpoint (POST)",
-			Metadata: map[string]any{
-				"values_len": len(in.Values),
-			},
-			IPAddress:     ctx.IP(),
-			ApplicationID: e.ApplicationID,
-		})
+		go func() {
+			_, _ = s.auditSvc.Create(context.Background(), audit.LogInput{
+				UserID:      "external",
+				Action:      "execute",
+				EntityType:  "endpoint",
+				EntityID:    e.ID,
+				Description: "executed endpoint (POST)",
+				Metadata: map[string]any{
+					"values":       in.Values,
+					"request_info": GetRequestInfo(ctx),
+				},
+				// IPAddress:     ctx.IP(), // todo: fix Ip address logging
+				ApplicationID: e.ApplicationID,
+			})
+		}()
 		return nil, nil
 	case "GET":
 		result, err := executeFetchQuery(conn, e.Query, e.Columns)
 		if err != nil {
 			return nil, err
 		}
-		_, _ = s.auditSvc.Create(ctx.UserContext(), audit.LogInput{
-			UserID:      userID,
-			Action:      "execute",
-			EntityType:  "endpoint",
-			EntityID:    e.ID,
-			Description: "executed endpoint (GET)",
-			Metadata: map[string]any{
-				"rows": len(result),
-			},
-			IPAddress:     ctx.IP(),
-			ApplicationID: e.ApplicationID,
-		})
+		go func() {
+			_, _ = s.auditSvc.Create(context.Background(), audit.LogInput{
+				UserID:      "external",
+				Action:      "execute",
+				EntityType:  "endpoint",
+				EntityID:    e.ID,
+				Description: "executed endpoint (GET)",
+				Metadata: map[string]any{
+					"rows":         len(result),
+					"request_info": GetRequestInfo(ctx),
+				},
+				// IPAddress:     ctx.IP(),  // todo: fix Ip address logging
+				ApplicationID: e.ApplicationID,
+			})
+		}()
 		return result, nil
 	}
 	return nil, nil
+}
+
+type RequestInfo struct {
+	IPAddress  string    `json:"ip_address"`
+	UserAgent  string    `json:"user_agent"`
+	Referrer   string    `json:"referrer"`
+	Method     string    `json:"method"`
+	Path       string    `json:"path"`
+	Host       string    `json:"host"`
+	Protocol   string    `json:"protocol"`
+	ReceivedAt time.Time `json:"received_at"`
+}
+
+func GetRequestInfo(c *fiber.Ctx) *RequestInfo {
+
+	return &RequestInfo{
+		UserAgent:  c.Get("User-Agent"),
+		Referrer:   c.Get("Referer"),
+		Method:     c.Method(),
+		Path:       c.OriginalURL(),
+		Host:       c.Hostname(),
+		Protocol:   c.Protocol(),
+		ReceivedAt: time.Now().UTC(),
+	}
 }
 
 func (s *service) update(ctx context.Context, userID, endpointID string, in UpdateEndpointInput) (string, error) {
@@ -489,6 +520,7 @@ func contains(slice []string, val string) bool {
 }
 
 func validateApiKeyInRequest(c *fiber.Ctx, apiKey string) (bool, error) {
+	fmt.Println("apiKey; ", apiKey)
 	reqHeaderKey := c.Get("X-Apikey")
 	if reqHeaderKey == "" || reqHeaderKey != apiKey {
 		return false, nil

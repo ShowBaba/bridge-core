@@ -132,6 +132,32 @@ func Init(db *gorm.DB) *graphql.Object {
 					return list, nil
 				},
 			),
+			"index": makeListField(
+				makeNodeListType("IndexList", IndexType),
+				func(params graphql.ResolveParams) (interface{}, error) {
+					userID, ok := params.Context.Value("id").(string)
+					if !ok {
+						return nil, errors.New("unauthorized access")
+					}
+					var (
+						list    ListResult
+						tx      *gorm.DB
+						indexes []database.Index
+					)
+					tx = db.Model(&database.Index{})
+					tx = tx.Where("user_id = ?", userID)
+					tx = parseDbClause(params, tx, IndexType)
+					res := tx.Debug().Scan(&indexes)
+					if res.RowsAffected > 0 {
+						list.Nodes = []interface{}{}
+						for _, u := range indexes {
+							list.Nodes = append(list.Nodes, interface{}(u))
+						}
+						list.TotalCount = len(list.Nodes)
+					}
+					return list, nil
+				},
+			),
 			"endpoints": makeListField(
 				makeNodeListType("EndpointList", EndpointType),
 				func(params graphql.ResolveParams) (interface{}, error) {

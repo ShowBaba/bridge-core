@@ -59,6 +59,7 @@ type DatabaseConnectionPayload struct {
 	Username string `json:"username" validate:"required"`
 	Password string `json:"password" validate:"required"`
 	DbEngine string `json:"db_engine" validate:"required"`
+	SSLMode  string `json:"ssl_mode" default:"disable"` // "disable", "require", "verify-ca", "verify-full"
 }
 
 type SchemaData struct {
@@ -66,9 +67,28 @@ type SchemaData struct {
 	Tables []TableData
 }
 
+type ColumnMeta struct {
+	Name         string
+	DataType     string
+	IsNullable   bool
+	DefaultValue *string
+	IsPrimaryKey bool
+	FKRefSchema  *string
+	FKRefTable   *string
+	FKRefColumn  *string
+	FKConstraint *string
+}
+
+type IndexMeta struct {
+	Name       string
+	Definition string
+	IsUnique   bool
+}
+
 type TableData struct {
 	Table   string
-	Columns []string
+	Columns []ColumnMeta
+	Indexes []IndexMeta
 }
 
 type ListOpts struct {
