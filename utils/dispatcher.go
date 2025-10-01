@@ -1,12 +1,13 @@
 package utils
 
 import (
-	"github.com/apitoolkit/apitoolkit-go"
+	"errors"
+
 	"github.com/gofiber/fiber/v2"
 )
 
 func Dispatch500Error(c *fiber.Ctx, err error) error {
-	apitoolkit.ReportError(c.UserContext(), err)
+	// apitoolkit.ReportError(c.UserContext(), err)
 	return c.Status(fiber.StatusInternalServerError).JSON(APIResponse{
 		Status:  fiber.StatusInternalServerError,
 		Message: err.Error(),
@@ -46,4 +47,28 @@ func Dispatch404Error(c *fiber.Ctx, msg string) error {
 		Status:  fiber.StatusNotFound,
 		Message: msg,
 	})
+}
+
+var ErrBadRequest = errors.New("bad request")
+
+type FieldError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+type BadRequestError struct {
+	Msg     string       `json:"message"`
+	Details []FieldError `json:"details,omitempty"`
+}
+
+func (e *BadRequestError) Error() string {
+	if e.Msg != "" {
+		return e.Msg
+	}
+	return ErrBadRequest.Error()
+}
+func (e *BadRequestError) Unwrap() error { return ErrBadRequest }
+
+func NewBadRequest(msg string, details ...FieldError) *BadRequestError {
+	return &BadRequestError{Msg: msg, Details: details}
 }

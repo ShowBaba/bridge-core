@@ -139,10 +139,60 @@ func (r *repository) update(ctx context.Context, d *Database, updates map[string
 }
 
 func (r *repository) delete(ctx context.Context, condition *Database) error {
-	return r.db.WithContext(ctx).
-		Model(&Database{}).
+	now := time.Now().UTC()
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if err := tx.Table("endpoints").
+		Where("database_id = ? AND deleted_at IS NULL", condition.ID).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&Column{}).
+		Where("deleted_at IS NULL").
+		Where("table_id IN (?)",
+			tx.Model(&Table{}).Select("id").
+				Where("deleted_at IS NULL").
+				Where("schema_id IN (?)",
+					tx.Model(&Schema{}).Select("id").
+						Where("database_id = ? AND deleted_at IS NULL", condition.ID),
+				),
+		).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&Table{}).
+		Where("deleted_at IS NULL").
+		Where("schema_id IN (?)",
+			tx.Model(&Schema{}).Select("id").
+				Where("database_id = ? AND deleted_at IS NULL", condition.ID),
+		).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&Schema{}).
+		Where("database_id = ? AND deleted_at IS NULL", condition.ID).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&Database{}).
 		Where("id = ? AND deleted_at IS NULL", condition.ID).
-		Update("deleted_at", time.Now().UTC()).Error
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 func (r *repository) restore(ctx context.Context, id string) error {

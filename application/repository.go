@@ -61,8 +61,77 @@ func (r *repository) update(ctx context.Context, a *Application, updates Applica
 }
 
 func (r *repository) delete(ctx context.Context, condition *Application) error {
-	return r.db.WithContext(ctx).
-		Model(&Application{}).
+	now := time.Now().UTC()
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	if err := tx.Table("endpoints").
+		Where("application_id = ? AND deleted_at IS NULL", condition.ID).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Table("columns").
+		Where("deleted_at IS NULL").
+		Where("table_id IN (?)",
+			tx.Table("tables").Select("id").
+				Where("deleted_at IS NULL").
+				Where("schema_id IN (?)",
+					tx.Table("schemas").Select("id").
+						Where("deleted_at IS NULL").
+						Where("database_id IN (?)",
+							tx.Table("databases").Select("id").
+								Where("application_id = ? AND deleted_at IS NULL", condition.ID),
+						),
+				),
+		).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Table("tables").
+		Where("deleted_at IS NULL").
+		Where("schema_id IN (?)",
+			tx.Table("schemas").Select("id").
+				Where("deleted_at IS NULL").
+				Where("database_id IN (?)",
+					tx.Table("databases").Select("id").
+						Where("application_id = ? AND deleted_at IS NULL", condition.ID),
+				),
+		).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Table("databases").
+		Where("deleted_at IS NULL").
+		Where("database_id IN (?)",
+			tx.Table("databases").Select("id").
+				Where("application_id = ? AND deleted_at IS NULL", condition.ID),
+		).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Table("databases").
+		Where("application_id = ? AND deleted_at IS NULL", condition.ID).
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&Application{}).
 		Where("id = ? AND deleted_at IS NULL", condition.ID).
-		Update("deleted_at", time.Now().UTC()).Error
+		Update("deleted_at", now).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }

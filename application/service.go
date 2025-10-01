@@ -3,13 +3,16 @@ package application
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/rabbitmq/amqp091-go"
 	auditpkg "github.com/showbaba/query-bridge/bridge-core/audit"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
+	"golang.org/x/text/unicode/norm"
 )
 
 var (
@@ -61,10 +64,17 @@ func (s *service) create(ctx context.Context, userID string, payload CreateAppli
 		encAPIKey = e
 	}
 
+	base := slugifyName(payload.Name)
+	slug, err := s.generateUniqueSlug(ctx, base)
+	if err != nil {
+		return err
+	}
+
 	app := &Application{
 		Name:   payload.Name,
 		UserID: userID,
 		ApiKey: encAPIKey,
+		Slug:   slug,
 	}
 	if err := s.repo.create(ctx, app); err != nil {
 		return err
@@ -76,11 +86,55 @@ func (s *service) create(ctx context.Context, userID string, payload CreateAppli
 		EntityType:    "application",
 		EntityID:      app.ID,
 		Description:   fmt.Sprintf("Created application %q", app.Name),
-		Metadata:      map[string]any{"name": app.Name},
+		Metadata:      map[string]any{"name": app.Name, "slug": app.Slug},
 		ApplicationID: app.ID,
 	})
 
 	return nil
+}
+
+var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
+
+func slugifyName(name string) string {
+	s := strings.ToLower(norm.NFKD.String(strings.TrimSpace(name)))
+	s = nonAlnum.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	if s == "" {
+		s = "app"
+	}
+	return s
+}
+
+func randBase36(n int) (string, error) {
+	const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
+	var b strings.Builder
+	b.Grow(n)
+	for i := 0; i < n; i++ {
+		var buf [1]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			return "", err
+		}
+		b.WriteByte(alphabet[int(buf[0])%len(alphabet)])
+	}
+	return b.String(), nil
+}
+
+func (s *service) generateUniqueSlug(ctx context.Context, base string) (string, error) {
+	const maxTry = 5
+	for i := 0; i < maxTry; i++ {
+		rnd, err := randBase36(6)
+		if err != nil {
+			return "", err
+		}
+		candidate := fmt.Sprintf("%s-%s", base, rnd)
+
+		if _, exist, err := s.repo.get(ctx, Application{Slug: candidate}); err != nil {
+			return "", err
+		} else if !exist {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("could not generate unique slug")
 }
 
 func (s *service) update(ctx context.Context, userID, appID string, payload UpdateApplicationPayload) error {
@@ -128,7 +182,7 @@ func (s *service) update(ctx context.Context, userID, appID string, payload Upda
 		Action:        "application.update",
 		EntityType:    "application",
 		EntityID:      found.ID,
-		Description:   "Updated application",
+		Description:   "updated application",
 		Metadata:      meta,
 		ApplicationID: found.ID,
 	})
@@ -143,19 +197,6 @@ func (s *service) delete(ctx context.Context, userID, appID string) error {
 	}
 	if !exist || found == nil {
 		return ErrNotFound
-	}
-
-	task := utils.DatabaseTask{
-		UserID:        userID,
-		ApplicationID: found.ID,
-		Action:        utils.DeleteApplicationResourceAction,
-	}
-	payload, err := json.Marshal(task)
-	if err != nil {
-		return err
-	}
-	if err := utils.PublishMessageToQueue(ctx, s.qConn, payload, utils.DATABASE_QUEUE); err != nil {
-		return err
 	}
 
 	if err := s.repo.delete(ctx, &Application{ID: found.ID}); err != nil {

@@ -20,6 +20,7 @@ type Database struct {
 	DbEngine      string         `json:"db_engine"`
 	ApplicationID string         `json:"application_id"`
 	UserID        string         `json:"user_id"`
+	SSLMode       string         `json:"ssl_mode"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `json:"-" gorm:"index"`

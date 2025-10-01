@@ -20,5 +20,6 @@ func InitializeDatabaseRoutes(app fiber.Router, db *gorm.DB, qC *amqp091.Connect
 	r.Patch("/:database_id/update", h.update)
 	r.Delete("/:database_id/delete", h.delete)
 	r.Post("/:application_id/add-database", h.add)
-
+	r.Post("/test-db-connection", h.testDbConnection)
+	r.Get("/:database_id/test-connection", h.testConnection)
 }

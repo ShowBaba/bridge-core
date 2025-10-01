@@ -9,3 +9,8 @@ type UpdateApplicationPayload struct {
 	Name   string `json:"name"`
 	ApiKey string `json:"api_key"`
 }
+
+type CreateEnvPayload struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}

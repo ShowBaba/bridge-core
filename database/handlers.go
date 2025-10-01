@@ -116,3 +116,73 @@ func (h *Handler) add(c *fiber.Ctx) error {
 		Message: "database created successfully",
 	})
 }
+
+func (h *Handler) testDbConnection(c *fiber.Ctx) error {
+	var input TestDbConnectionPayload
+	if err := c.BodyParser(&input); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
+	}
+	v := validator.New()
+	if err := v.Struct(input); err != nil {
+		return utils.Dispatch400Error(c, err.(validator.ValidationErrors).Error())
+	}
+
+	connectionStatus, err := h.svc.testDbConnection(&input)
+	if err != nil {
+		return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+			Status:  fiber.StatusOK,
+			Message: "database connection failed",
+			Data: map[string]interface{}{
+				"connection_status": connectionStatus,
+				"error":             err.Error(),
+			},
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "database connection successful",
+		Data: map[string]interface{}{
+			"connection_status": connectionStatus,
+		},
+	})
+}
+
+func (h *Handler) testConnection(c *fiber.Ctx) error {
+	dbID := c.Params("database_id")
+	if dbID == "" {
+		return utils.Dispatch400Error(c, "invalid or missing database ID")
+	}
+
+	uid, _ := c.Locals("id").(string)
+	if uid == "" {
+		return utils.Dispatch401Error(c, "unauthorized")
+	}
+
+	ok, err := h.svc.testConnection(c.UserContext(), uid, dbID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			return utils.Dispatch404Error(c, "database or application not found")
+		case errors.Is(err, ErrUnauthorized):
+			return utils.Dispatch401Error(c, "unauthorized")
+		default:
+			return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+				Status:  fiber.StatusOK,
+				Message: "database connection failed",
+				Data: map[string]any{
+					"connection_status": false,
+					"error":             err.Error(),
+				},
+			})
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "database connection successful",
+		Data: map[string]any{
+			"connection_status": ok,
+		},
+	})
+}

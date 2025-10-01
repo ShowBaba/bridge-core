@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/graphql-go/graphql"
@@ -57,7 +58,7 @@ func Init(db *gorm.DB) *graphql.Object {
 					)
 					tx = db.Model(&application.Application{})
 					tx = tx.Where("user_id = ?", userID)
-					tx = parseDbClause(params, tx, ApplicationType)
+					tx = parseDbClause(params, tx, ApplicationType).Order("created_at DESC")
 					res := tx.Debug().Scan(&applications)
 					if res.RowsAffected > 0 {
 						list.Nodes = []interface{}{}
@@ -91,7 +92,7 @@ func Init(db *gorm.DB) *graphql.Object {
 					)
 					tx = db.Model(&database.Database{})
 					tx = tx.Where("user_id = ?", userID)
-					tx = parseDbClause(params, tx, DatabaseType)
+					tx = parseDbClause(params, tx, DatabaseType).Order("created_at DESC")
 					res := tx.Debug().Scan(&databases)
 					if res.RowsAffected > 0 {
 						list.Nodes = []interface{}{}
@@ -120,7 +121,7 @@ func Init(db *gorm.DB) *graphql.Object {
 					)
 					tx = db.Model(&database.Column{})
 					tx = tx.Where("user_id = ?", userID)
-					tx = parseDbClause(params, tx, ColumnType)
+					tx = parseDbClause(params, tx, ColumnType).Order("created_at DESC")
 					res := tx.Debug().Scan(&columns)
 					if res.RowsAffected > 0 {
 						list.Nodes = []interface{}{}
@@ -165,6 +166,7 @@ func Init(db *gorm.DB) *graphql.Object {
 					if !ok {
 						return nil, errors.New("unauthorized access")
 					}
+
 					var (
 						list      ListResult
 						tx        *gorm.DB
@@ -172,11 +174,49 @@ func Init(db *gorm.DB) *graphql.Object {
 					)
 					tx = db.Model(&endpoint.Endpoint{})
 					tx = tx.Where("user_id = ?", userID)
-					tx = parseDbClause(params, tx, EndpointType)
+					tx = parseDbClause(params, tx, EndpointType).Order("created_at DESC")
 					res := tx.Debug().Scan(&endpoints)
+
+					if res.Error != nil {
+						return nil, res.Error
+					}
+
 					if res.RowsAffected > 0 {
-						list.Nodes = []interface{}{}
+						appIDSet := make(map[string]struct{}, len(endpoints))
+						for _, e := range endpoints {
+							appIDSet[e.ApplicationID] = struct{}{}
+						}
+						appIDs := make([]string, 0, len(appIDSet))
+						for id := range appIDSet {
+							appIDs = append(appIDs, id)
+						}
+
+						type appRow struct {
+							ID   string
+							Slug string
+						}
+						var apps []appRow
+						if err := db.Table("applications").
+							Select("id, slug").
+							Where("id IN ?", appIDs).
+							Where("user_id = ?", userID).
+							Scan(&apps).Error; err != nil {
+							return nil, err
+						}
+						slugByApp := make(map[string]string, len(apps))
+						for _, a := range apps {
+							slugByApp[a.ID] = a.Slug
+						}
+
+						base := utils.GetConfig().ServerBaseURL
+						list.Nodes = make([]interface{}, 0, len(endpoints))
 						for _, u := range endpoints {
+							slug := slugByApp[u.ApplicationID]
+							version := "v1"
+							if u.Version != "" {
+								version = u.Version
+							}
+							u.URL = utils.FormatPublicURL(base, version, slug, u.Path)
 							list.Nodes = append(list.Nodes, interface{}(u))
 						}
 						list.TotalCount = len(list.Nodes)
@@ -251,11 +291,19 @@ func Init(db *gorm.DB) *graphql.Object {
 					)
 					tx = db.Model(&audit.Audit{})
 					tx = tx.Where("user_id = ?", userID)
-					tx = parseDbClause(params, tx, AuditType)
+					tx = parseDbClause(params, tx, AuditType).Order("created_at DESC")
 					res := tx.Debug().Scan(&audits)
 					if res.RowsAffected > 0 {
 						list.Nodes = []interface{}{}
 						for _, u := range audits {
+							row := db.Raw(`SELECT 
+	    		  	COALESCE(first_name, '')      AS first_name
+							FROM users WHERE id = ?`, userID).Row()
+							if err := row.Scan(&u.Username); err != nil {
+								fmt.Println("Error scanning row:", err)
+								return nil, errors.New("something went wrong")
+							}
+
 							list.Nodes = append(list.Nodes, interface{}(u))
 						}
 						list.TotalCount = len(list.Nodes)

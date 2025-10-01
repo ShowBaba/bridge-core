@@ -1,6 +1,8 @@
 package db
 
 import (
+	"log"
+
 	"github.com/showbaba/query-bridge/bridge-core/application"
 	"github.com/showbaba/query-bridge/bridge-core/audit"
 	"github.com/showbaba/query-bridge/bridge-core/database"
@@ -10,26 +12,18 @@ import (
 )
 
 func Migrate(db *gorm.DB) error {
-	err := db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&application.Application{},
 		&user.User{},
 		&database.Database{},
-		&database.Index{},
-		&database.Schema{},
 		&database.Table{},
+		&database.Schema{},
 		&database.Column{},
+		&database.Index{},
 		&endpoint.Endpoint{},
 		&audit.Audit{},
-	)
-
-	db.Model(&application.Application{}).Association("UserID")
-	db.Model(&database.Database{}).Association("ApplicationID")
-	db.Model(&database.Schema{}).Association("DatabaseID")
-	db.Model(&database.Table{}).Association("SchemaID")
-	db.Model(&database.Column{}).Association("TableID")
-	db.Model(&endpoint.Endpoint{}).Association("TableID")
-
-	if err != nil {
+	); err != nil {
+		log.Printf("auto-migrate failed: %v", err)
 		return err
 	}
 	return nil

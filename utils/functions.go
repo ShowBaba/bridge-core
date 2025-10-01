@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -74,32 +73,6 @@ func HashPassword(password string) (string, error) {
 	return string(bytes), err
 }
 
-func WriteError(statusCode int, message string) []byte {
-	response := APIResponse{
-		Status:  statusCode,
-		Message: message,
-	}
-	data, err := json.Marshal(response)
-	if err == nil {
-		return data
-	} else {
-		log.Printf("Err: %s", err)
-	}
-	return nil
-}
-
-func WriteInfo(format string, args ...interface{}) []byte {
-	response := map[string]string{
-		"info": fmt.Sprintf(format, args...),
-	}
-	if data, err := json.Marshal(response); err == nil {
-		return data
-	} else {
-		log.Printf("Err: %s", err)
-	}
-	return nil
-}
-
 func TestDatabaseConnection(payload DatabaseConnectionPayload) (*sql.DB, error) {
 	var dsn string
 
@@ -114,8 +87,9 @@ func TestDatabaseConnection(payload DatabaseConnectionPayload) (*sql.DB, error) 
 	case "postgres":
 		sslmode := payload.SSLMode
 		if sslmode == "" {
-			sslmode = "require"
+			sslmode = "disable"
 		}
+
 		dsn = fmt.Sprintf(
 			"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
 			payload.Host, payload.Port,
@@ -128,11 +102,11 @@ func TestDatabaseConnection(payload DatabaseConnectionPayload) (*sql.DB, error) 
 
 	db, err := sql.Open(payload.DbEngine, dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to the database: %v", err)
+		return nil, err
 	}
 
 	if err = db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping the database: %v", err)
+		return nil, err
 	}
 
 	return db, nil
@@ -248,4 +222,63 @@ func GetIPAddressFromCtx(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+func FormatPublicURL(base, version, slug, path string) string {
+	return fmt.Sprintf("%s/api/%s/%s%s", base, version, slug, path)
+}
+
+// AESEncrypt encrypts a message using AES-256-CFB encryption with the given key
+// and initialization vector (IV). It returns the encrypted message as a base64
+// encoded string.
+func AESEncrypt(message, key, iv []byte) (string, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovering from panic in AES Decrypt error is: %v \n", r)
+		}
+	}()
+
+	byteMsg := []byte(message)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("could not create new cipher: %v", err)
+	}
+
+	cipherText := make([]byte, aes.BlockSize+len(byteMsg))
+	copy(cipherText[:aes.BlockSize], iv) // Set IV manually
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(cipherText[aes.BlockSize:], byteMsg)
+
+	return base64.StdEncoding.EncodeToString(cipherText), nil
+}
+
+// AESDecrypt decrypts a message using AES encryption. It takes a message, key,
+// and iv as parameters and returns the decrypted message as a string.
+func AESDecrypt(message string, key, iv []byte) (string, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("Recovering from panic in AES Decrypt error is: %v \n", r)
+		}
+	}()
+
+	cipherText, err := base64.StdEncoding.DecodeString(message)
+	if err != nil {
+		return "", fmt.Errorf("could not base64 decode: %v", err)
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("could not create new cipher: %v", err)
+	}
+
+	if len(cipherText) < aes.BlockSize {
+		return "", fmt.Errorf("invalid ciphertext block size")
+	}
+
+	// Use the passed IV instead of extracting from ciphertext
+	stream := cipher.NewCFBDecrypter(block, iv)
+	plainText := make([]byte, len(cipherText[aes.BlockSize:]))
+	stream.XORKeyStream(plainText, cipherText[aes.BlockSize:])
+
+	return string(plainText), nil
 }

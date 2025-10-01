@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"github.com/graphql-go/graphql"
+	"github.com/graphql-go/graphql/language/ast"
 )
 
 var UserType = graphql.NewObject(
@@ -44,6 +45,7 @@ var DatabaseType = graphql.NewObject(
 			"username":       &graphql.Field{Type: graphql.String},
 			"password":       &graphql.Field{Type: graphql.String},
 			"db_engine":      &graphql.Field{Type: graphql.String},
+			"ssl_mode":       &graphql.Field{Type: graphql.String},
 			"application_id": &graphql.Field{Type: graphql.String},
 			"created_at":     &graphql.Field{Type: graphql.DateTime},
 			"updated_at":     &graphql.Field{Type: graphql.DateTime},
@@ -91,6 +93,45 @@ var IndexType = graphql.NewObject(
 	},
 )
 
+func parseLiteral(v ast.Value) interface{} {
+	switch n := v.(type) {
+	case *ast.ObjectValue:
+		m := map[string]interface{}{}
+		for _, f := range n.Fields {
+			m[f.Name.Value] = parseLiteral(f.Value)
+		}
+		return m
+	case *ast.ListValue:
+		out := make([]interface{}, len(n.Values))
+		for i, it := range n.Values {
+			out[i] = parseLiteral(it)
+		}
+		return out
+	case *ast.StringValue:
+		return n.Value
+	case *ast.IntValue:
+		return n.Value
+	case *ast.FloatValue:
+		return n.Value
+	case *ast.BooleanValue:
+		return n.Value
+	case *ast.EnumValue:
+		return n.Value
+	default:
+		return nil
+	}
+}
+
+var JSON = graphql.NewScalar(graphql.ScalarConfig{
+	Name:        "JSON",
+	Description: "Arbitrary JSON value",
+	Serialize:   func(value interface{}) interface{} { return value },
+	ParseValue:  func(value interface{}) interface{} { return value },
+	ParseLiteral: func(v ast.Value) interface{} {
+		return parseLiteral(v)
+	},
+})
+
 var EndpointType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Endpoint",
@@ -98,13 +139,24 @@ var EndpointType = graphql.NewObject(
 			"id":              &graphql.Field{Type: graphql.String},
 			"name":            &graphql.Field{Type: graphql.String},
 			"application_id":  &graphql.Field{Type: graphql.String},
-			"database_id":     &graphql.Field{Type: graphql.String},
 			"table_id":        &graphql.Field{Type: graphql.String},
-			"limit":           &graphql.Field{Type: graphql.Int},
+			"database_id":     &graphql.Field{Type: graphql.String},
+			"user_id":         &graphql.Field{Type: graphql.String},
+			"method":          &graphql.Field{Type: graphql.String},
+			"path":            &graphql.Field{Type: graphql.String},
+			"version":         &graphql.Field{Type: graphql.String},
+			"query_template":  &graphql.Field{Type: graphql.String},
+			"is_public":       &graphql.Field{Type: graphql.Boolean},
+			"columns":         &graphql.Field{Type: graphql.NewList(graphql.String)},
+			"limit_default":   &graphql.Field{Type: graphql.Int},
+			"limit_max":       &graphql.Field{Type: graphql.Int},
 			"order_by":        &graphql.Field{Type: graphql.String},
 			"order_direction": &graphql.Field{Type: graphql.String},
-			"query":           &graphql.Field{Type: graphql.String},
-			"is_public":       &graphql.Field{Type: graphql.Boolean},
+			"timeout_ms":      &graphql.Field{Type: graphql.Int},
+			"url":             &graphql.Field{Type: graphql.String},
+			"param_schema":    &graphql.Field{Type: JSON},
+			"query_schema":    &graphql.Field{Type: JSON},
+			"body_schema":     &graphql.Field{Type: JSON},
 			"created_at":      &graphql.Field{Type: graphql.DateTime},
 			"updated_at":      &graphql.Field{Type: graphql.DateTime},
 		},
@@ -178,6 +230,9 @@ var AuditType = graphql.NewObject(
 				Type: graphql.String,
 			},
 			"metadata": &graphql.Field{
+				Type: graphql.String,
+			},
+			"username": &graphql.Field{
 				Type: graphql.String,
 			},
 			"ip_address": &graphql.Field{

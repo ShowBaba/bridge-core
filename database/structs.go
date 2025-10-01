@@ -8,6 +8,7 @@ type UpdateDatabasePayload struct {
 	Password string `json:"password"`
 	DbEngine string `json:"db_engine"`
 	Name     string `json:"name"`
+	SSLMode  string `json:"ssl_mode"`
 }
 
 type AddDatabasePayload struct {
@@ -18,4 +19,15 @@ type AddDatabasePayload struct {
 	Username string `json:"username" validate:"required"`
 	Password string `json:"password" validate:"required"`
 	DbEngine string `json:"db_engine" validate:"required"`
+	SSLMode  string `json:"ssl_mode"`
+}
+
+type TestDbConnectionPayload struct {
+	Host     string `json:"host" validate:"required"`
+	Port     uint   `json:"port" validate:"required"`
+	Database string `json:"database" validate:"required"`
+	Username string `json:"username" validate:"required"`
+	Password string `json:"password"`
+	DbEngine string `json:"db_engine" validate:"required"`
+	SSLMode  string `json:"ssl_mode"`
 }

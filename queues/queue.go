@@ -219,6 +219,7 @@ func (q *Queue) logSqlQuery(applicationID, userID string, ch <-chan string, errC
 	}
 }
 
+// deprecated: repo already handles cascading deletes
 func (q *Queue) handleDeleteApplicationResourceTask(task utils.DatabaseTask) error {
 	var endpointIDs []string
 	endpoints, err := q.endpointSvc.List(q.ctx, endpointPkg.Endpoint{ApplicationID: task.ApplicationID}, utils.ListOpts{})
@@ -290,6 +291,7 @@ func (q *Queue) handleDeleteApplicationResourceTask(task utils.DatabaseTask) err
 	return nil
 }
 
+// deprecated: repo already handles cascading deletes
 func (q *Queue) handleDeleteDBResourceTask(task utils.DatabaseTask) error {
 	var (
 		schemaIDs []string

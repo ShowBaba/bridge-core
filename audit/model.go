@@ -18,6 +18,7 @@ type Audit struct {
 	Description   string         `json:"description,omitempty"`
 	Metadata      string         `json:"metadata,omitempty"`
 	IPAddress     string         `json:"ip_address,omitempty"`
+	Username      string         `gorm:"-" json:"username,omitempty"`
 	CreatedAt     time.Time      `json:"created_at"`
 	UpdatedAt     time.Time      `json:"-"`
 	DeletedAt     gorm.DeletedAt `json:"-" gorm:"index"`

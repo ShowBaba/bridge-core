@@ -33,6 +33,8 @@ type Service interface {
 	DeleteManyColumns(ctx context.Context, ids []string) error
 	ListTables(ctx context.Context, q Table) ([]Table, error)
 	DeleteManyTables(ctx context.Context, ids []string) error
+	testDbConnection(input *TestDbConnectionPayload) (bool, error)
+	testConnection(ctx context.Context, userID, databaseID string) (bool, error) // test existing db's connection
 }
 
 type service struct {
@@ -55,7 +57,7 @@ func (s *service) DeleteMany(ctx context.Context, ids []string) error {
 		Action:      "delete_many",
 		EntityType:  "database",
 		EntityID:    "",
-		Description: fmt.Sprintf("soft-deleted %d databases", len(ids)),
+		Description: fmt.Sprintf("deleted %d databases", len(ids)),
 		Metadata: map[string]any{
 			"ids": ids,
 		},
@@ -74,7 +76,7 @@ func (s *service) DeleteManyTables(ctx context.Context, ids []string) error {
 		Action:      "delete_many",
 		EntityType:  "table",
 		EntityID:    "",
-		Description: fmt.Sprintf("soft-deleted %d tables", len(ids)),
+		Description: fmt.Sprintf("deleted %d tables", len(ids)),
 		Metadata: map[string]any{
 			"ids": ids,
 		},
@@ -97,7 +99,7 @@ func (s *service) DeleteManyColumns(ctx context.Context, ids []string) error {
 		Action:      "delete_many",
 		EntityType:  "column",
 		EntityID:    "",
-		Description: fmt.Sprintf("soft-deleted %d columns", len(ids)),
+		Description: fmt.Sprintf("deleted %d columns", len(ids)),
 		Metadata: map[string]any{
 			"ids": ids,
 		},
@@ -116,7 +118,7 @@ func (s *service) DeleteManySchemas(ctx context.Context, ids []string) error {
 		Action:      "delete_many",
 		EntityType:  "schema",
 		EntityID:    "",
-		Description: fmt.Sprintf("soft-deleted %d schemas", len(ids)),
+		Description: fmt.Sprintf("deleted %d schemas", len(ids)),
 		Metadata: map[string]any{
 			"ids": ids,
 		},
@@ -213,6 +215,7 @@ func (s *service) update(ctx context.Context, userID, databaseID string, p Updat
 	user := coalesceStr(p.Username, d.Username)
 	engine := coalesceStr(p.DbEngine, d.DbEngine)
 	name := coalesceStr(p.Name, d.Name)
+	sslmode := coalesceStr(p.SSLMode, d.SSLMode)
 
 	var currentPwd string
 	rawPwd, err := utils.Decrypt(d.Password, []byte(utils.GetConfig().EncryptionKey))
@@ -248,6 +251,7 @@ func (s *service) update(ctx context.Context, userID, databaseID string, p Updat
 		"Password": encPwd,
 		"DbEngine": engine,
 		"Name":     name,
+		"SSLMode":  sslmode,
 	}
 	if err := s.repo.update(ctx, d, updates); err != nil {
 		return err
@@ -288,6 +292,44 @@ func (s *service) update(ctx context.Context, userID, databaseID string, p Updat
 	return nil
 }
 
+func (s *service) testConnection(ctx context.Context, userID, databaseID string) (bool, error) {
+	d, ok, err := s.repo.get(ctx, Database{ID: databaseID})
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, ErrNotFound
+	}
+
+	app, err := s.applicationSvc.Get(ctx, &application.Application{ID: d.ApplicationID})
+	if err != nil {
+		return false, err
+	}
+	if app.UserID != userID {
+		return false, ErrUnauthorized
+	}
+
+	rawPwd, err := utils.Decrypt(d.Password, []byte(utils.GetConfig().EncryptionKey))
+	if err != nil {
+		return false, err
+	}
+
+	conn, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
+		Host:     d.Host,
+		Port:     d.Port,
+		Database: d.Database,
+		Username: d.Username,
+		Password: string(rawPwd),
+		DbEngine: d.DbEngine,
+		SSLMode:  d.SSLMode,
+	})
+	if err != nil {
+		return false, err
+	}
+	_ = conn.Close()
+
+	return true, nil
+}
 func (s *service) delete(ctx context.Context, userID, databaseID string) error {
 	d, ok, err := s.repo.get(ctx, Database{ID: databaseID})
 	if err != nil {
@@ -305,16 +347,6 @@ func (s *service) delete(ctx context.Context, userID, databaseID string) error {
 		return ErrUnauthorized
 	}
 
-	task := utils.DatabaseTask{
-		DatabaseID: d.ID,
-		UserID:     userID,
-		Action:     utils.DeleteDBResourceAction,
-	}
-	payload, err := json.Marshal(task)
-	if err == nil {
-		_ = utils.PublishMessageToQueue(ctx, s.qConn, payload, utils.DATABASE_QUEUE)
-	}
-
 	if err := s.repo.delete(ctx, &Database{ID: d.ID}); err != nil {
 		return err
 	}
@@ -324,7 +356,7 @@ func (s *service) delete(ctx context.Context, userID, databaseID string) error {
 		Action:      "delete",
 		EntityType:  "database",
 		EntityID:    d.ID,
-		Description: "soft-deleted database",
+		Description: "deleted database",
 		Metadata: map[string]any{
 			"database_id": d.ID,
 		},
@@ -333,6 +365,23 @@ func (s *service) delete(ctx context.Context, userID, databaseID string) error {
 	})
 
 	return nil
+}
+
+func (s *service) testDbConnection(input *TestDbConnectionPayload) (bool, error) {
+	conn, err := utils.TestDatabaseConnection(utils.DatabaseConnectionPayload{
+		Host:     input.Host,
+		Port:     input.Port,
+		Database: input.Database,
+		Username: input.Username,
+		Password: input.Password,
+		DbEngine: input.DbEngine,
+		SSLMode:  input.SSLMode,
+	})
+	if err != nil {
+		return false, err
+	}
+	defer conn.Close()
+	return true, nil
 }
 
 func (s *service) add(ctx context.Context, userID, appID string, payload AddDatabasePayload) error {
@@ -359,6 +408,7 @@ func (s *service) add(ctx context.Context, userID, appID string, payload AddData
 		Username: payload.Username,
 		Password: payload.Password,
 		DbEngine: payload.DbEngine,
+		SSLMode:  payload.SSLMode,
 	})
 	if err != nil {
 		return fmt.Errorf("error creating database connection: %w", err)
