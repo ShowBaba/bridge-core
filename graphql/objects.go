@@ -180,12 +180,14 @@ var StreamLogType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "StreamLog",
 		Fields: graphql.Fields{
-			"message":    &graphql.Field{Type: graphql.String},
-			"level":      &graphql.Field{Type: graphql.String},
-			"source":     &graphql.Field{Type: graphql.String},
-			"timestamp":  &graphql.Field{Type: graphql.String},
-			"created_at": &graphql.Field{Type: graphql.DateTime},
-			"updated_at": &graphql.Field{Type: graphql.DateTime},
+			"message":     &graphql.Field{Type: graphql.String},
+			"level":       &graphql.Field{Type: graphql.String},
+			"source":      &graphql.Field{Type: graphql.String},
+			"timestamp":   &graphql.Field{Type: graphql.String},
+			"application": &graphql.Field{Type: graphql.String},
+			"user":        &graphql.Field{Type: graphql.String},
+			"created_at":  &graphql.Field{Type: graphql.DateTime},
+			"updated_at":  &graphql.Field{Type: graphql.DateTime},
 		},
 	},
 )
@@ -204,6 +206,161 @@ var TableType = graphql.NewObject(
 	},
 )
 
+var EndpointScriptType = graphql.NewObject(
+	graphql.ObjectConfig{
+		Name: "EndpointScript",
+		Fields: graphql.Fields{
+			"id":                &graphql.Field{Type: graphql.String},
+			"endpoint_id":       &graphql.Field{Type: graphql.String},
+			"kind":              &graphql.Field{Type: graphql.String},
+			"code":              &graphql.Field{Type: graphql.String},
+			"lang":              &graphql.Field{Type: graphql.String},
+			"enabled":           &graphql.Field{Type: graphql.Boolean},
+			"script_timeout_ms": &graphql.Field{Type: graphql.Int},
+			"created_at":        &graphql.Field{Type: graphql.DateTime},
+			"updated_at":        &graphql.Field{Type: graphql.DateTime},
+		},
+	},
+)
+
+var LatencyPointType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "LatencyPoint",
+	Fields: graphql.Fields{
+		"ts":  &graphql.Field{Type: graphql.String}, // RFC3339
+		"p50": &graphql.Field{Type: graphql.Float},
+		"p95": &graphql.Field{Type: graphql.Float},
+		"p99": &graphql.Field{Type: graphql.Float},
+	},
+})
+
+var DashboardType = graphql.NewObject(graphql.ObjectConfig{
+	Name: "Dashboard",
+	Fields: graphql.Fields{
+		"lastUpdatedISO": &graphql.Field{Type: graphql.String},
+		"user": &graphql.Field{
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "DashboardUser",
+				Fields: graphql.Fields{
+					"displayName": &graphql.Field{Type: graphql.String},
+					"avatarUrl":   &graphql.Field{Type: graphql.String},
+				},
+			}),
+		},
+		"summary": &graphql.Field{
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "DashboardSummary",
+				Fields: graphql.Fields{
+					"applications": &graphql.Field{
+						Type: graphql.NewObject(graphql.ObjectConfig{
+							Name:   "SummaryApplications",
+							Fields: graphql.Fields{"count": &graphql.Field{Type: graphql.Int}},
+						}),
+					},
+					"databases": &graphql.Field{
+						Type: graphql.NewObject(graphql.ObjectConfig{
+							Name:   "SummaryDatabases",
+							Fields: graphql.Fields{"count": &graphql.Field{Type: graphql.Int}},
+						}),
+					},
+					"endpoints": &graphql.Field{
+						Type: graphql.NewObject(graphql.ObjectConfig{
+							Name:   "SummaryEndpoints",
+							Fields: graphql.Fields{"count": &graphql.Field{Type: graphql.Int}},
+						}),
+					},
+					"api_requests": &graphql.Field{
+						Type: graphql.NewObject(graphql.ObjectConfig{
+							Name: "SummaryAPIRequests",
+							Fields: graphql.Fields{
+								"count":        &graphql.Field{Type: graphql.Int},
+								"deltaPercent": &graphql.Field{Type: graphql.Float},
+								"deltaWindow":  &graphql.Field{Type: graphql.String},
+								"trend": &graphql.Field{
+									Type: graphql.NewEnum(graphql.EnumConfig{
+										Name: "APIDeltaTrend",
+										Values: graphql.EnumValueConfigMap{
+											"up":   &graphql.EnumValueConfig{Value: "up"},
+											"down": &graphql.EnumValueConfig{Value: "down"},
+										},
+									}),
+								},
+							},
+						}),
+					},
+				},
+			}),
+		},
+		"performance": &graphql.Field{
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "DashboardPerformance",
+				Fields: graphql.Fields{
+					"reliability": &graphql.Field{
+						Type: graphql.NewObject(graphql.ObjectConfig{
+							Name: "PerformanceReliability",
+							Fields: graphql.Fields{
+								"successRatePercent": &graphql.Field{Type: graphql.Float},
+								"errorRatePercent":   &graphql.Field{Type: graphql.Float},
+								"errorBreakdown": &graphql.Field{
+									Type: graphql.NewObject(graphql.ObjectConfig{
+										Name: "ErrorBreakdown",
+										Fields: graphql.Fields{
+											"x4xx": &graphql.Field{Type: graphql.Int},
+											"x5xx": &graphql.Field{Type: graphql.Int},
+										},
+									}),
+								},
+							},
+						}),
+					},
+					"latency": &graphql.Field{
+						Type: graphql.NewObject(graphql.ObjectConfig{
+							Name: "PerformanceLatency",
+							Fields: graphql.Fields{
+								"average":       &graphql.Field{Type: graphql.Float},
+								"p95":           &graphql.Field{Type: graphql.Float},
+								"p99":           &graphql.Field{Type: graphql.Float},
+								"unit":          &graphql.Field{Type: graphql.String},
+								"window":        &graphql.Field{Type: graphql.String},
+								"bucketSizeSec": &graphql.Field{Type: graphql.Int},
+								"timeseries":    &graphql.Field{Type: graphql.NewList(LatencyPointType)},
+							},
+						}),
+					},
+					"topEndpoints": &graphql.Field{
+						Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
+							Name: "TopEndpoint",
+							Fields: graphql.Fields{
+								"path":         &graphql.Field{Type: graphql.String},
+								"rpm":          &graphql.Field{Type: graphql.Float},
+								"avgLatencyMs": &graphql.Field{Type: graphql.Float},
+							},
+						})),
+					},
+					"slowestEndpoints": &graphql.Field{
+						Type: graphql.NewList(graphql.NewObject(graphql.ObjectConfig{
+							Name: "SlowEndpoint",
+							Fields: graphql.Fields{
+								"path":         &graphql.Field{Type: graphql.String},
+								"avgLatencyMs": &graphql.Field{Type: graphql.Float},
+								"p95LatencyMs": &graphql.Field{Type: graphql.Float},
+							},
+						})),
+					},
+				},
+			}),
+		},
+		"systemHealth": &graphql.Field{
+			Type: graphql.NewObject(graphql.ObjectConfig{
+				Name: "SystemHealth",
+				Fields: graphql.Fields{
+					"apiUptimePercent": &graphql.Field{Type: graphql.Float},
+					"averageLatencyMs": &graphql.Field{Type: graphql.Float},
+					"errorRatePercent": &graphql.Field{Type: graphql.Float},
+				},
+			}),
+		},
+	},
+})
 var AuditType = graphql.NewObject(
 	graphql.ObjectConfig{
 		Name: "Audit",
@@ -238,6 +395,8 @@ var AuditType = graphql.NewObject(
 			"ip_address": &graphql.Field{
 				Type: graphql.String,
 			},
+			"ts":  &graphql.Field{Type: graphql.String},
+			"ago": &graphql.Field{Type: graphql.String},
 			"created_at": &graphql.Field{
 				Type: graphql.DateTime,
 			},

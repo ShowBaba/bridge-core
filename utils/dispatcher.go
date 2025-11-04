@@ -72,3 +72,13 @@ func (e *BadRequestError) Unwrap() error { return ErrBadRequest }
 func NewBadRequest(msg string, details ...FieldError) *BadRequestError {
 	return &BadRequestError{Msg: msg, Details: details}
 }
+
+func Dispatch422FieldErrors(c *fiber.Ctx, message string, fields []FieldError) error {
+	return c.Status(fiber.StatusUnprocessableEntity).JSON(APIResponse{
+		Status:  fiber.StatusUnprocessableEntity,
+		Message: message,
+		Data: map[string]any{
+			"errors": fields,
+		},
+	})
+}

@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
+
+	log "github.com/showbaba/query-bridge/bridge-core/logger"
 
 	"github.com/rabbitmq/amqp091-go"
 	databasePkg "github.com/showbaba/query-bridge/bridge-core/database"
-	logPkg "github.com/showbaba/query-bridge/bridge-core/database-log"
 	endpointPkg "github.com/showbaba/query-bridge/bridge-core/endpoint"
+	logPkg "github.com/showbaba/query-bridge/bridge-core/log"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 	"go.mongodb.org/mongo-driver/mongo"
 	"gorm.io/gorm"
@@ -46,7 +47,7 @@ func NewQueue(pg *gorm.DB, mongo *mongo.Client, connection *amqp091.Connection,
 }
 
 func (q *Queue) initDBQueue() error {
-	log.Println("setting up database tasks queue")
+	log.Info("setting up database tasks queue")
 
 	ch, err := q.qConn.Channel()
 	if err != nil {
@@ -90,7 +91,7 @@ func (q *Queue) initDBQueue() error {
 
 	go func() {
 		for err := range errorCh {
-			log.Printf("worker error: %s", err)
+			log.Error("worker error: %s", err)
 		}
 	}()
 
@@ -99,7 +100,7 @@ func (q *Queue) initDBQueue() error {
 		for msg := range databaseTasks {
 			var task utils.DatabaseTask
 			if err := json.Unmarshal(msg.Body, &task); err != nil {
-				log.Println("error unmarshalling message:", err)
+				log.Error("error unmarshalling message:", err)
 				continue
 			}
 			requestCh <- task
@@ -123,7 +124,7 @@ type Worker struct {
 
 func (w *Worker) run() {
 	for task := range w.requestCh {
-		log.Printf("Worker [%d] processing task with db id: (%v)", w.id, task.DatabaseID)
+		log.Info("Worker [%d] processing task with db id: (%v)", w.id, task.DatabaseID)
 		var err error
 		switch task.Action {
 		case utils.FetchDBAction:
@@ -137,7 +138,7 @@ func (w *Worker) run() {
 			select {
 			case w.errorCh <- err:
 			default:
-				log.Printf("worker %d dropping error: %v", w.id, err)
+				log.Error("worker %d dropping error: %v", w.id, err)
 			}
 		}
 	}
@@ -194,7 +195,7 @@ func (q *Queue) handleFetchDbTask(task utils.DatabaseTask) error {
 	done := make(chan struct{})
 	go func() {
 		for e := range errCh {
-			log.Printf("pipeline error: %v", e)
+			log.Error("pipeline error: %v", e)
 		}
 		close(done)
 	}()
@@ -212,7 +213,7 @@ func (q *Queue) handleFetchDbTask(task utils.DatabaseTask) error {
 
 func (q *Queue) logSqlQuery(applicationID, userID string, ch <-chan string, errCh chan<- error) {
 	for logData := range ch {
-		err := q.logSvc.Create(logData, applicationID, userID)
+		err := q.logSvc.Create(logData, applicationID, userID, "DATABASE", "INFO")
 		if err != nil {
 			errCh <- err
 		}

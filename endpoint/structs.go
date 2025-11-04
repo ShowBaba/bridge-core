@@ -8,6 +8,14 @@ import (
 	"github.com/showbaba/query-bridge/bridge-core/database"
 )
 
+type ScriptInput struct {
+	Lang            string `json:"lang"`
+	Code            string `json:"code"`
+	Enabled         *bool  `json:"enabled"`
+	ScriptTimeoutMS *int   `json:"script_timeout_ms"`
+	Kind            string `json:"kind"` // pre | post
+}
+
 type CreateEndpointInput struct {
 	Name           string   `json:"name" validate:"required"`
 	ApplicationID  string   `json:"application_id" validate:"required"`
@@ -28,6 +36,14 @@ type CreateEndpointInput struct {
 	ParamSchema any `json:"param_schema"`
 	QuerySchema any `json:"query_schema"`
 	BodySchema  any `json:"body_schema"`
+
+	PreScript  *ScriptInput `json:"pre_script"`
+	PostScript *ScriptInput `json:"post_script"`
+}
+
+type UpdateEndpointScriptsInput struct {
+	PreScripts  []ScriptInput `json:"pre_scripts"`
+	PostScripts []ScriptInput `json:"post_scripts"`
 }
 
 type PreviewEndpointSQLInput struct {
@@ -80,6 +96,9 @@ type UpdateEndpointInput struct {
 	ParamSchema any `json:"param_schema"`
 	QuerySchema any `json:"query_schema"`
 	BodySchema  any `json:"body_schema"`
+
+	PreScript  *ScriptInput `json:"pre_script"`
+	PostScript *ScriptInput `json:"post_script"`
 }
 
 type ExecuteEndpointInput struct {
@@ -150,4 +169,15 @@ func validateOrderByColumnExist(columns []database.Column, orderBy string) error
 		}
 	}
 	return fmt.Errorf("OrderBy column '%s' does not exist in the selected table", orderBy)
+}
+
+type PreviewScriptInput struct {
+	Kind      string `json:"kind" validate:"required,oneof=pre post"`
+	Lang      string `json:"lang" validate:"required,oneof=js"`
+	Code      string `json:"code" validate:"required"`
+	TimeoutMS *int   `json:"timeout_ms"`
+
+	Request  map[string]any `json:"request"`  // headers, pathParams, query, body, values
+	Response map[string]any `json:"response"` // status, headers, body|rows|rowCount (for GET)
+
 }

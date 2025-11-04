@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+
+	log "github.com/showbaba/query-bridge/bridge-core/logger"
 
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
@@ -13,7 +14,7 @@ import (
 var ctx = context.Background()
 
 func InitNotificationQueue(connection *amqp091.Connection) error {
-	log.Println("setting up notification tasks queue")
+	log.Init("setting up notification tasks queue")
 	channel, err := connection.Channel()
 	if err != nil {
 		return err
@@ -43,7 +44,7 @@ func InitNotificationQueue(connection *amqp091.Connection) error {
 		nil,
 	)
 	if err != nil {
-		log.Printf("error subscribing to message - %v", err)
+		log.Error("error subscribing to message - %v", err)
 		return err
 	}
 
@@ -55,12 +56,12 @@ func InitNotificationQueue(connection *amqp091.Connection) error {
 				var payload EmailMsgPayload
 				err := json.Unmarshal(emailMsg.Body, &payload)
 				if err != nil {
-					log.Println(err)
+					log.Error("error unmarshaling email payload - %v", err)
 					// TODO: store logs for application
 				}
 				fmt.Println("processing notification ... ")
 				if err := HandleEmailMsg(ctx, payload); err != nil {
-					log.Println(err)
+					log.Error("error handling email message - %v", err)
 				}
 			}
 		}

@@ -7,6 +7,7 @@ type LogInput struct {
 	EntityType    string
 	EntityID      string
 	Description   string
+	Severity      Severity
 	Metadata      any
 	IPAddress     string
 }

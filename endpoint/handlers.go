@@ -226,3 +226,85 @@ func (h *Handler) delete(c *fiber.Ctx) error {
 		Message: "endpoint deleted successfully",
 	})
 }
+
+func (h *Handler) previewScript(c *fiber.Ctx) error {
+	var in PreviewScriptInput
+	if err := c.BodyParser(&in); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
+	}
+	v := validator.New()
+	if err := v.Struct(in); err != nil {
+		var ve validator.ValidationErrors
+		if errors.As(err, &ve) {
+			return utils.Dispatch400Error(c, ve.Error())
+		}
+		return utils.Dispatch400Error(c, "invalid payload")
+	}
+
+	uid, _ := c.Locals("id").(string)
+	if uid == "" {
+		return utils.Dispatch401Error(c, "unauthorized")
+	}
+
+	out, err := h.svc.previewScript(c.UserContext(), uid, in)
+	if err != nil {
+		var br *utils.BadRequestError
+		if errors.As(err, &br) {
+			return c.Status(fiber.StatusBadRequest).JSON(utils.APIResponse{
+				Status:  fiber.StatusBadRequest,
+				Message: br.Msg,
+				Data:    br.Details,
+			})
+		}
+		return utils.Dispatch500Error(c, err)
+	}
+
+	return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "script executed",
+		Data:    out,
+	})
+}
+
+// endpoint/handler.go (add)
+
+func (h *Handler) updateScripts(c *fiber.Ctx) error {
+	endpointID := c.Params("endpoint_id")
+	if endpointID == "" {
+		return utils.Dispatch400Error(c, "missing endpoint_id")
+	}
+
+	var in UpdateEndpointScriptsInput
+	if err := c.BodyParser(&in); err != nil {
+		return utils.Dispatch400Error(c, "invalid body")
+	}
+
+	uid, _ := c.Locals("id").(string)
+	if uid == "" {
+		return utils.Dispatch401Error(c, "unauthorized")
+	}
+
+	scripts, err := h.svc.updateScripts(c.UserContext(), uid, endpointID, in)
+	if err != nil {
+		var br *utils.BadRequestError
+		switch {
+		case errors.Is(err, ErrNotFound):
+			return utils.Dispatch404Error(c, "cannot find resource")
+		case errors.Is(err, ErrUnauthorized):
+			return utils.Dispatch401Error(c, "unauthorized")
+		case errors.As(err, &br):
+			return utils.Dispatch422FieldErrors(c, br.Msg, br.Details)
+		default:
+			return utils.Dispatch500Error(c, err)
+		}
+	}
+
+	return c.Status(fiber.StatusOK).JSON(utils.APIResponse{
+		Status:  fiber.StatusOK,
+		Message: "scripts updated",
+		Data: fiber.Map{
+			"count":   len(scripts),
+			"scripts": scripts,
+		},
+	})
+}

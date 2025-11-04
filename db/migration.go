@@ -1,7 +1,7 @@
 package db
 
 import (
-	"log"
+	log "github.com/showbaba/query-bridge/bridge-core/logger"
 
 	"github.com/showbaba/query-bridge/bridge-core/application"
 	"github.com/showbaba/query-bridge/bridge-core/audit"
@@ -21,9 +21,11 @@ func Migrate(db *gorm.DB) error {
 		&database.Column{},
 		&database.Index{},
 		&endpoint.Endpoint{},
+		&endpoint.EndpointScript{},
+		&endpoint.EndpointStats{},
 		&audit.Audit{},
 	); err != nil {
-		log.Printf("auto-migrate failed: %v", err)
+		log.Error("auto-migrate failed: %v", err)
 		return err
 	}
 	return nil

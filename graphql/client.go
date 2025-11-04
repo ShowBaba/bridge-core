@@ -40,7 +40,7 @@ func RunGQL(c *fiber.Ctx, schema graphql.Schema, ctx context.Context) error {
 			}
 			claim, err := utils.ValidateAuthToken(parts[1], utils.GetConfig().JWTSecretKey)
 			if err != nil {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"status": "failure", "message": fmt.Sprintf("error validating auth token token: %v", err)})
+				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"status": "failure", "message": fmt.Sprintf("error validating auth token token: %v", err)})
 			}
 			ctx = context.WithValue(ctx, utils.KeyID, claim.ID)
 		}

@@ -36,13 +36,14 @@ func (s *service) login(ctx context.Context, payload LoginPayload) (string, erro
 	if err != nil {
 		_, _ = s.auditSvc.Create(ctx, auditpkg.LogInput{
 			UserID:      "",
-			Action:      "LOGIN_FAILED",
+			Action:      "auth.login.failed",
 			EntityType:  "User",
 			EntityID:    "",
 			Description: fmt.Sprintf("Login attempt failed due to DB error for email %s", payload.Email),
 			Metadata: map[string]interface{}{
 				"email": payload.Email,
 			},
+			Severity:  auditpkg.SeverityError,
 			IPAddress: utils.GetIPAddressFromCtx(ctx),
 		})
 		return "", err
@@ -50,9 +51,10 @@ func (s *service) login(ctx context.Context, payload LoginPayload) (string, erro
 	if !ok || u == nil {
 		_, _ = s.auditSvc.Create(ctx, auditpkg.LogInput{
 			UserID:      "",
-			Action:      "LOGIN_FAILED",
+			Action:      "auth.login.failed",
 			EntityType:  "User",
 			EntityID:    "",
+			Severity:    auditpkg.SeverityError,
 			Description: fmt.Sprintf("Login attempt failed, user not found for email %s", payload.Email),
 			Metadata: map[string]interface{}{
 				"email": payload.Email,
@@ -69,13 +71,14 @@ func (s *service) login(ctx context.Context, payload LoginPayload) (string, erro
 	if !match {
 		_, _ = s.auditSvc.Create(ctx, auditpkg.LogInput{
 			UserID:      u.ID,
-			Action:      "LOGIN_FAILED",
+			Action:      "auth.login.failed",
 			EntityType:  "User",
 			EntityID:    u.ID,
 			Description: "Invalid password provided",
 			Metadata: map[string]interface{}{
 				"email": payload.Email,
 			},
+			Severity:  auditpkg.SeverityError,
 			IPAddress: utils.GetIPAddressFromCtx(ctx),
 		})
 		return "", ErrInvalidLogin
@@ -88,13 +91,14 @@ func (s *service) login(ctx context.Context, payload LoginPayload) (string, erro
 
 	_, _ = s.auditSvc.Create(ctx, auditpkg.LogInput{
 		UserID:      u.ID,
-		Action:      "LOGIN_SUCCESS",
+		Action:      "auth.login.success",
 		EntityType:  "User",
 		EntityID:    u.ID,
 		Description: "User logged in successfully",
 		Metadata: map[string]interface{}{
 			"email": payload.Email,
 		},
+		Severity:  auditpkg.SeverityInfo,
 		IPAddress: utils.GetIPAddressFromCtx(ctx),
 	})
 

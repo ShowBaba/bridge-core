@@ -1,10 +1,13 @@
 package graphql
 
 import (
+	"database/sql"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/graphql-go/graphql"
 	"gorm.io/gorm"
@@ -41,6 +44,7 @@ func makeListField(listType graphql.Output, resolve graphql.FieldResolveFn) *gra
 		fields = ApplicationType.Fields()
 	case "DatabaseList":
 		fields = DatabaseType.Fields()
+
 	case "ColumnList":
 		fields = ColumnType.Fields()
 	case "IndexType":
@@ -49,8 +53,14 @@ func makeListField(listType graphql.Output, resolve graphql.FieldResolveFn) *gra
 		fields = EndpointType.Fields()
 	case "SchemaList":
 		fields = SchemaType.Fields()
+	case "StreamLogList":
+		fields = StreamLogType.Fields()
 	case "TableList":
 		fields = TableType.Fields()
+	case "EndpointScriptList":
+		fields = EndpointScriptType.Fields()
+	case "DashboardList":
+		fields = DashboardType.Fields()
 	case "AuditList":
 		fields = AuditType.Fields()
 	}
@@ -99,6 +109,10 @@ func parseDbClause(params graphql.ResolveParams, tx *gorm.DB, nodeType *graphql.
 		}
 		if key == "name" && nodeType.Name() == "Application" {
 			tx = tx.Where("LOWER(name) LIKE ?", fmt.Sprintf(`%%%s%%`, strings.ToLower(val.(string))))
+			continue
+		}
+		if key == "name" && nodeType.Name() == "Database" {
+			tx = tx.Where("LOWER(name) LIKE ? OR LOWER(database) LIKE ?", fmt.Sprintf(`%%%s%%`, strings.ToLower(val.(string))), fmt.Sprintf(`%%%s%%`, strings.ToLower(val.(string))))
 			continue
 		}
 		// handle tables with possible ambiguous id
@@ -192,4 +206,68 @@ func underscore(s string) string {
 		}
 	}
 	return strings.ToLower(strings.Join(a, "_"))
+}
+
+func calcDelta(cur, prev int64) (deltaPercent float64, trend string) {
+	trend = "up"
+	if cur < prev {
+		trend = "down"
+	}
+	if prev == 0 {
+		if cur == 0 {
+			return 0, "up"
+		}
+		return 100, "up"
+	}
+	return (float64(cur-prev) * 100.0) / float64(prev), trend
+}
+
+func humanizeAgo(t time.Time) string {
+	d := time.Since(t)
+	if d < time.Minute {
+		return "just now"
+	}
+	if d < time.Hour {
+		return pluralize(int(d.Minutes()), "min") + " ago"
+	}
+	if d < 24*time.Hour {
+		return pluralize(int(d.Hours()), "hr") + " ago"
+	}
+	return pluralize(int(d.Hours()/24), "day") + " ago"
+}
+
+func pluralize(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
+}
+
+func nullOrStr(s sql.NullString) any {
+	if s.Valid {
+		return s.String
+	}
+	return nil
+}
+
+func avgOrNil(v sql.NullFloat64) interface{} {
+	if v.Valid {
+		return math.Round(v.Float64)
+	}
+	return nil
+}
+func avgOrZero(v sql.NullFloat64) float64 {
+	if v.Valid {
+		return math.Round(v.Float64)
+	}
+	return 0
+}
+func roundOrZero(v float64) float64 { return math.Round(v) }
+
+func roundIf(v float64) float64 { return math.Round(v) }
+func nullFloatToAny(v sql.NullFloat64) interface{} {
+	if v.Valid {
+		return math.Round(v.Float64)
+	}
+	return nil
 }

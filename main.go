@@ -4,14 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
+	log "github.com/showbaba/query-bridge/bridge-core/logger"
+
 	"github.com/showbaba/query-bridge/bridge-core/audit"
-	logPkg "github.com/showbaba/query-bridge/bridge-core/database-log"
+	logPkg "github.com/showbaba/query-bridge/bridge-core/log"
 	"github.com/showbaba/query-bridge/bridge-core/queues"
 	"golang.org/x/sync/errgroup"
 
@@ -47,27 +48,31 @@ func main() {
 
 	qConn, err = amqp091.Dial(utils.GetConfig().RabbitmqServerURL)
 	if err != nil {
-		log.Fatal(fmt.Errorf(`error opening queue connection; %v`, err))
+		panic(fmt.Errorf(`error opening queue connection; %v`, err))
 	}
 
 	dbClient, pgConn, err = db.ConnectToPgDB(
 		utils.GetConfig().DbHost, utils.GetConfig().DbUser, utils.GetConfig().DbPassword, utils.GetConfig().DbName, utils.GetConfig().DbPort,
 	)
 	if err != nil {
-		log.Fatal(fmt.Errorf(`error creating pg database connection; %v`, err))
+		panic(fmt.Errorf(`error creating pg database connection; %v`, err))
 	}
 
 	mongoClient, err = db.ConnectToMongoDB(context.Background(), utils.GetConfig().MongoURI)
 	if err != nil {
-		log.Fatal(fmt.Errorf(`error creating mongo database connection; %v`, err))
+		panic(fmt.Errorf(`error creating mongo database connection; %v`, err))
+	}
+	if err := db.EnsureMongoIndexes(context.Background(), mongoClient); err != nil {
+		log.Error(`error ensuring mongo indexes; %v`, err)
 	}
 
 	g.Go(func() error {
 		auditSvc := audit.NewService(audit.NewRepository(dbClient))
 		applicationSvc := application.NewService(application.NewRepository(dbClient), qConn, auditSvc)
 		databaseSvc := database.NewService(database.NewRepository(dbClient), applicationSvc, auditSvc, qConn)
-		endpointSvc := endpoint.NewService(endpoint.NewRepository(dbClient), applicationSvc, databaseSvc, auditSvc)
 		logSvc := logPkg.NewService(logPkg.NewRepository(mongoClient))
+
+		endpointSvc := endpoint.NewService(endpoint.NewRepository(dbClient), applicationSvc, databaseSvc, auditSvc, logSvc)
 		if err := queues.NewQueue(dbClient, mongoClient, qConn, databaseSvc, endpointSvc, logSvc); err != nil {
 			return fmt.Errorf(`error initializing database queue; %v`, err)
 		}
@@ -86,7 +91,7 @@ func main() {
 		fmt.Println("initializing websocket queue...")
 		schema, err := graphql.NewSchema(
 			graphql.SchemaConfig{
-				Query: gql.Init(dbClient),
+				Query: gql.Init(dbClient, logPkg.NewRepository(mongoClient)),
 			},
 		)
 		if err != nil {
@@ -129,7 +134,7 @@ func main() {
 		if port == "" {
 			port = "8080"
 		}
-		log.Printf("starting server on port: %s", port)
+		log.Info("starting server on port: %s", port)
 		if err := app.Listen(fmt.Sprintf(":%s", port)); err != nil {
 			return fmt.Errorf(`fail to start server; %v`, err)
 		}
@@ -141,7 +146,7 @@ func main() {
 	})
 
 	if err := g.Wait(); err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 
 	stop := make(chan os.Signal, 1)
@@ -150,27 +155,27 @@ func main() {
 	case <-stop:
 	case <-ctx.Done():
 		if err := qConn.Close(); err != nil {
-			log.Printf("Error closing queue connection: %v", err)
+			log.Warn("Error closing queue connection: %v", err)
 		} else {
-			log.Println("Queue connection closed.")
+			log.Info("Queue connection closed.")
 		}
 
 		if err := pgConn.Close(); err != nil {
-			log.Printf("Error closing pg connection: %v", err)
+			log.Warn("Error closing pg connection: %v", err)
 		} else {
-			log.Println("PostgresSQL connection closed.")
+			log.Info("PostgresSQL connection closed.")
 		}
 
 		if err := db.CloseDBConnection(mongoClient, ctx); err != nil {
-			log.Printf("Error closing MongoDB connection: %v", err)
+			log.Warn("Error closing MongoDB connection: %v", err)
 		} else {
-			log.Println("MongoDB connection closed.")
+			log.Info("MongoDB connection closed.")
 		}
 	default:
-		log.Fatal("some unknown error occurred during shutdown")
+		log.Error("some unknown error occurred during shutdown")
 	}
 
-	log.Println("Server and database connections closed. Goodbye!")
+	log.Info("Server and database connections closed. Goodbye!")
 }
 
 func InitializeRoutes(ctx context.Context, app *fiber.App, dbCl *gorm.DB, qConnection *amqp091.Connection,
@@ -195,5 +200,5 @@ func InitializeRoutes(ctx context.Context, app *fiber.App, dbCl *gorm.DB, qConne
 	user.InitializeUserRoutes(app, dbCl, qConnection)
 	application.InitializeApplicationRoutes(app, dbCl, qConnection)
 	database.InitializeDatabaseRoutes(app, dbCl, qConnection)
-	endpoint.InitializeEndpointRoutes(app, dbCl, qConnection)
+	endpoint.InitializeEndpointRoutes(app, dbCl, qConnection, mongoClient)
 }

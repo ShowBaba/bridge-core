@@ -1,10 +1,11 @@
 package utils
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
+
+	log "github.com/showbaba/query-bridge/bridge-core/logger"
 
 	"github.com/joho/godotenv"
 )
@@ -69,7 +70,7 @@ func init() {
 		basepath = filepath.Join(dir, ".env")
 	)
 	if err := godotenv.Load(basepath); err != nil {
-		log.Print("No .env file found")
+		log.Error("no .env file found")
 		panic(err)
 	}
 }

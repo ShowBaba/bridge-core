@@ -15,6 +15,7 @@ type Audit struct {
 	Action        string         `json:"action"`
 	EntityType    string         `json:"entity_type"`
 	EntityID      string         `json:"entity_id"`
+	Severity      string         `json:"severity"`
 	Description   string         `json:"description,omitempty"`
 	Metadata      string         `json:"metadata,omitempty"`
 	IPAddress     string         `json:"ip_address,omitempty"`
@@ -35,3 +36,12 @@ func (a *Audit) BeforeUpdate(tx *gorm.DB) (err error) {
 	a.UpdatedAt = time.Now().UTC()
 	return nil
 }
+
+type Severity string
+
+const (
+	SeverityInfo  Severity = "info"
+	SeverityWarn  Severity = "warn"
+	SeverityError Severity = "error"
+	SeverityDebug Severity = "debug"
+)

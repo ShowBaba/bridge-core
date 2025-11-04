@@ -50,6 +50,7 @@ func (s *service) register(ctx context.Context, p RegisterPayload) (*User, error
 		FirstName: p.Firstname,
 		LastName:  p.Lastname,
 		Password:  hash,
+		AvatarURL: p.AvatarURL,
 	}
 	created, err := s.repo.create(ctx, u)
 	if err != nil {

@@ -1,4 +1,4 @@
-package database_log
+package log
 
 import (
 	"time"

@@ -2,7 +2,8 @@ package notification
 
 import (
 	"context"
-	"log"
+
+	log "github.com/showbaba/query-bridge/bridge-core/logger"
 
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
@@ -14,9 +15,9 @@ func HandleEmailMsg(ctx context.Context, payload EmailMsgPayload) error {
 		To:      payload.To,
 		Body:    payload.Body,
 	}
-	log.Println("sending email to - ", mail.To)
+	log.Info("sending email to - ", mail.To)
 	if err := SendEmail(mail); err != nil {
-		log.Printf("error while sending mail; err: %v", err)
+		log.Warn("error while sending mail; err: %v", err)
 	}
 
 	return nil

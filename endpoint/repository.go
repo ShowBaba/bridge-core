@@ -18,10 +18,18 @@ type Repository interface {
 	listByAppMethodAndVersion(ctx context.Context, appID, method, version string) ([]Endpoint, error)
 	delete(ctx context.Context, condition *Endpoint) error
 
-	create(ctx context.Context, e *Endpoint) error
+	create(ctx context.Context, e *Endpoint) (*Endpoint, error)
 	update(ctx context.Context, e *Endpoint, updates Endpoint) error
 	list(ctx context.Context, filter Endpoint, opts utils.ListOpts) ([]Endpoint, error)
 	deleteMany(ctx context.Context, ids []string) error
+
+	upsertScripts(ctx context.Context, endpointID string, scripts []EndpointScript, userID string) error
+	getScripts(ctx context.Context, endpointID string) ([]EndpointScript, error)
+	deleteScriptsByEndpoint(ctx context.Context, endpointID string) error
+
+	createScripts(ctx context.Context, scripts []EndpointScript) error
+	listScriptsByEndpoint(ctx context.Context, endpointID string) ([]EndpointScript, error)
+	createEndpointStat(ctx context.Context, e *EndpointStats) error
 }
 
 type repository struct{ db *gorm.DB }
@@ -63,7 +71,14 @@ func (r *repository) listByAppAndMethod(ctx context.Context, appID, method strin
 	return out, nil
 }
 
-func (r *repository) create(ctx context.Context, e *Endpoint) error {
+func (r *repository) create(ctx context.Context, a *Endpoint) (*Endpoint, error) {
+	if err := r.db.WithContext(ctx).Create(a).Error; err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func (r *repository) createEndpointStat(ctx context.Context, e *EndpointStats) error {
 	return r.db.WithContext(ctx).Create(e).Error
 }
 
@@ -129,4 +144,61 @@ func (r *repository) listByAppMethodAndVersion(ctx context.Context, appID, metho
 			appID, method, version).
 		Find(&out).Error
 	return out, err
+}
+
+func (r *repository) upsertScripts(ctx context.Context, endpointID string, scripts []EndpointScript, userID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("endpoint_id = ?", endpointID).
+			Delete(&EndpointScript{}).Error; err != nil {
+			return err
+		}
+
+		if len(scripts) == 0 {
+			return nil
+		}
+
+		for i := range scripts {
+			scripts[i].EndpointID = endpointID
+			scripts[i].UserID = userID
+		}
+		if err := tx.Create(&scripts).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+func (r *repository) getScripts(ctx context.Context, endpointID string) ([]EndpointScript, error) {
+	var out []EndpointScript
+	if err := r.db.WithContext(ctx).
+		Where("endpoint_id = ? AND deleted_at IS NULL", endpointID).
+		Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (r *repository) deleteScriptsByEndpoint(ctx context.Context, endpointID string) error {
+	return r.db.WithContext(ctx).
+		Where("endpoint_id = ? AND deleted_at IS NULL", endpointID).
+		Delete(&EndpointScript{}).Error
+}
+
+func (r *repository) createScripts(ctx context.Context, scripts []EndpointScript) error {
+	if len(scripts) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Create(&scripts).Error
+}
+
+func (r *repository) listScriptsByEndpoint(ctx context.Context, endpointID string) ([]EndpointScript, error) {
+	var out []EndpointScript
+	if err := r.db.WithContext(ctx).
+		Where("endpoint_id = ? AND deleted_at IS NULL", endpointID).
+		Order("created_at ASC").
+		Find(&out).Error; err != nil {
+		return nil, err
+	}
+	return out, nil
 }

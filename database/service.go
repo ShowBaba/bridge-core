@@ -9,6 +9,7 @@ import (
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/showbaba/query-bridge/bridge-core/application"
 	"github.com/showbaba/query-bridge/bridge-core/audit"
+	auditpkg "github.com/showbaba/query-bridge/bridge-core/audit"
 	"github.com/showbaba/query-bridge/bridge-core/utils"
 )
 
@@ -54,13 +55,14 @@ func (s *service) DeleteMany(ctx context.Context, ids []string) error {
 	}
 	_, _ = s.auditSvc.Create(ctx, audit.LogInput{
 		UserID:      "",
-		Action:      "delete_many",
+		Action:      "database.delete.many",
 		EntityType:  "database",
 		EntityID:    "",
 		Description: fmt.Sprintf("deleted %d databases", len(ids)),
 		Metadata: map[string]any{
 			"ids": ids,
 		},
+		Severity:      auditpkg.SeverityWarn,
 		IPAddress:     utils.GetIPAddressFromCtx(ctx),
 		ApplicationID: "",
 	})
@@ -73,13 +75,14 @@ func (s *service) DeleteManyTables(ctx context.Context, ids []string) error {
 	}
 	_, _ = s.auditSvc.Create(ctx, audit.LogInput{
 		UserID:      "",
-		Action:      "delete_many",
+		Action:      "table.delete.many",
 		EntityType:  "table",
 		EntityID:    "",
 		Description: fmt.Sprintf("deleted %d tables", len(ids)),
 		Metadata: map[string]any{
 			"ids": ids,
 		},
+		Severity:      auditpkg.SeverityWarn,
 		IPAddress:     utils.GetIPAddressFromCtx(ctx),
 		ApplicationID: "",
 	})
@@ -96,9 +99,10 @@ func (s *service) DeleteManyColumns(ctx context.Context, ids []string) error {
 	}
 	_, _ = s.auditSvc.Create(ctx, audit.LogInput{
 		UserID:      "",
-		Action:      "delete_many",
+		Action:      "column.delete.many",
 		EntityType:  "column",
 		EntityID:    "",
+		Severity:    auditpkg.SeverityWarn,
 		Description: fmt.Sprintf("deleted %d columns", len(ids)),
 		Metadata: map[string]any{
 			"ids": ids,
@@ -115,9 +119,10 @@ func (s *service) DeleteManySchemas(ctx context.Context, ids []string) error {
 	}
 	_, _ = s.auditSvc.Create(ctx, audit.LogInput{
 		UserID:      "",
-		Action:      "delete_many",
+		Action:      "schema.delete.many",
 		EntityType:  "schema",
 		EntityID:    "",
+		Severity:    auditpkg.SeverityWarn,
 		Description: fmt.Sprintf("deleted %d schemas", len(ids)),
 		Metadata: map[string]any{
 			"ids": ids,
@@ -259,13 +264,14 @@ func (s *service) update(ctx context.Context, userID, databaseID string, p Updat
 
 	_, _ = s.auditSvc.Create(ctx, audit.LogInput{
 		UserID:      userID,
-		Action:      "update",
+		Action:      "database.update",
 		EntityType:  "database",
 		EntityID:    d.ID,
 		Description: "updated database",
 		Metadata: map[string]any{
 			"updates": updates,
 		},
+		Severity:      auditpkg.SeverityInfo,
 		IPAddress:     utils.GetIPAddressFromCtx(ctx),
 		ApplicationID: d.ApplicationID,
 	})
@@ -353,13 +359,14 @@ func (s *service) delete(ctx context.Context, userID, databaseID string) error {
 
 	_, _ = s.auditSvc.Create(ctx, audit.LogInput{
 		UserID:      userID,
-		Action:      "delete",
+		Action:      "database.delete",
 		EntityType:  "database",
 		EntityID:    d.ID,
 		Description: "deleted database",
 		Metadata: map[string]any{
 			"database_id": d.ID,
 		},
+		Severity:      auditpkg.SeverityWarn,
 		IPAddress:     utils.GetIPAddressFromCtx(ctx),
 		ApplicationID: d.ApplicationID,
 	})
@@ -438,7 +445,7 @@ func (s *service) add(ctx context.Context, userID, appID string, payload AddData
 
 	_, _ = s.auditSvc.Create(ctx, audit.LogInput{
 		UserID:      userID,
-		Action:      "create",
+		Action:      "database.create",
 		EntityType:  "database",
 		EntityID:    created.ID,
 		Description: "created database",
@@ -451,6 +458,7 @@ func (s *service) add(ctx context.Context, userID, appID string, payload AddData
 			"db_engine":      created.DbEngine,
 			"application_id": created.ApplicationID,
 		},
+		Severity:      auditpkg.SeverityInfo,
 		IPAddress:     utils.GetIPAddressFromCtx(ctx),
 		ApplicationID: created.ApplicationID,
 	})

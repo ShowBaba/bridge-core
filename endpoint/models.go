@@ -51,3 +51,54 @@ func (e *Endpoint) BeforeUpdate(tx *gorm.DB) (err error) {
 	e.UpdatedAt = time.Now().UTC()
 	return nil
 }
+
+type EndpointScript struct {
+	ID              string `gorm:"primaryKey;size:32"`
+	EndpointID      string `gorm:"index"`
+	Kind            string `gorm:"size:8"` // "pre" | "post"
+	Lang            string `gorm:"size:8"` // "js"
+	Code            string `gorm:"type:text"`
+	Enabled         bool
+	ScriptTimeoutMS *int           `json:"script_timeout_ms"`
+	UserID          string         `json:"user_id"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+func (e *EndpointScript) BeforeCreate(tx *gorm.DB) (err error) {
+	e.ID = strings.ReplaceAll(uuid.New().String(), "-", "")
+	now := time.Now().UTC()
+	e.CreatedAt = now
+	e.UpdatedAt = now
+	return nil
+}
+
+func (e *EndpointScript) BeforeUpdate(tx *gorm.DB) (err error) {
+	e.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+type EndpointStats struct {
+	ID                   string         `gorm:"primaryKey;size:32"`
+	EndpointID           string         `gorm:"index"`
+	ResponseStatusCode   int            `json:"response_status_code"`
+	ExecutionTimeMS      int            `json:"execution_time_ms"`
+	QueryExecutionTimeMS int            `json:"query_execution_time_ms"`
+	CreatedAt            time.Time      `json:"created_at"`
+	UpdatedAt            time.Time      `json:"updated_at"`
+	DeletedAt            gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+func (e *EndpointStats) BeforeCreate(tx *gorm.DB) (err error) {
+	e.ID = strings.ReplaceAll(uuid.New().String(), "-", "")
+	now := time.Now().UTC()
+	e.CreatedAt = now
+	e.UpdatedAt = now
+	return nil
+}
+
+func (e *EndpointStats) BeforeUpdate(tx *gorm.DB) (err error) {
+	e.UpdatedAt = time.Now().UTC()
+	return nil
+}

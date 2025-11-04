@@ -11,9 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"strings"
 	"time"
+
+	log "github.com/showbaba/query-bridge/bridge-core/logger"
 
 	_ "github.com/denisenkom/go-mssqldb"
 	_ "github.com/go-sql-driver/mysql"
@@ -37,7 +38,7 @@ func ValidateAuthHeaderToken() fiber.Handler {
 		}
 		claim, err := ValidateAuthToken(parts[1], GetConfig().JWTSecretKey)
 		if err != nil {
-			return Dispatch400Error(c, fmt.Sprintf("error validating auth token token: %v", err))
+			return Dispatch401Error(c, fmt.Sprintf("error validating auth token token: %v", err))
 		}
 		c.Locals("email", claim.Email)
 		c.Locals("id", claim.ID)
@@ -128,7 +129,7 @@ func PublishMessageToQueue(ctx context.Context, conn *amqp091.Connection, messag
 	)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Error("error publishing message to queue: %v", err)
 	}
 	return nil
 }
