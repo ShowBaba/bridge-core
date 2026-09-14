@@ -37,7 +37,7 @@ API documentation can be found [here](https://documenter.getpostman.com/view/116
 
 ## Frontend Repository
 
-The frontend React Tailwind application for the QueryBridge dashboard can be found [here](https://github.com/ShowBaba/bridge-dashboard.git)
+The frontend React Tailwind application for the QueryBridge dashboard can be found [here](https://github.com/ShowBaba/querybridge-frontend)
 
 ## Figma Design
 
